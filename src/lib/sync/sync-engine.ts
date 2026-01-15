@@ -54,6 +54,7 @@ export interface SyncOptions {
   force?: boolean;
   depth?: number;
   progress?: SyncProgressReporter;
+  signal?: { cancelled: boolean };
 }
 
 export interface SyncResult {
@@ -61,6 +62,7 @@ export interface SyncResult {
   changes: SyncDiff;
   warnings: string[];
   errors: string[];
+  cancelled?: boolean;
 }
 
 /**
@@ -269,8 +271,10 @@ export class SyncEngine {
       changes: { added: [], modified: [], deleted: [] },
       warnings: [],
       errors: [],
+      cancelled: false,
     };
     const progress = options.progress;
+    const signal = options.signal;
 
     try {
       // Read existing config
@@ -327,6 +331,11 @@ export class SyncEngine {
 
       // Process added pages
       for (const change of diff.added) {
+        // Check for cancellation
+        if (signal?.cancelled) {
+          result.cancelled = true;
+          break;
+        }
         currentChange++;
         progress?.onPageStart?.(currentChange, totalChanges, change.title, 'added');
         try {
@@ -383,6 +392,11 @@ export class SyncEngine {
 
       // Process modified pages
       for (const change of diff.modified) {
+        // Check for cancellation
+        if (signal?.cancelled) {
+          result.cancelled = true;
+          break;
+        }
         currentChange++;
         progress?.onPageStart?.(currentChange, totalChanges, change.title, 'modified');
         try {
@@ -459,6 +473,11 @@ export class SyncEngine {
 
       // Process deleted pages
       for (const change of diff.deleted) {
+        // Check for cancellation
+        if (signal?.cancelled) {
+          result.cancelled = true;
+          break;
+        }
         currentChange++;
         progress?.onPageStart?.(currentChange, totalChanges, change.title, 'deleted');
         try {

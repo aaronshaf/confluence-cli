@@ -7,6 +7,19 @@ import { readSpaceConfig, hasSpaceConfig } from '../../lib/space-config.js';
 import { SyncEngine, type SyncProgressReporter } from '../../lib/sync/index.js';
 
 /**
+ * Cancellation token for sync operations
+ */
+class CancellationToken {
+  private _cancelled = false;
+  get cancelled(): boolean {
+    return this._cancelled;
+  }
+  cancel(): void {
+    this._cancelled = true;
+  }
+}
+
+/**
  * Create a progress reporter for sync operations
  */
 function createProgressReporter(spinner: Ora): SyncProgressReporter {
@@ -116,6 +129,16 @@ export async function syncCommand(options: SyncCommandOptions): Promise<void> {
   // Perform sync
   const spinner = ora(options.dryRun ? 'Checking for changes...' : 'Fetching pages...').start();
   const progressReporter = options.dryRun ? undefined : createProgressReporter(spinner);
+  const cancellation = new CancellationToken();
+
+  // Handle Ctrl+C gracefully
+  const sigintHandler = (): void => {
+    cancellation.cancel();
+    spinner.stop();
+    console.log('');
+    console.log(chalk.yellow('Cancelling sync... (saving progress)'));
+  };
+  process.on('SIGINT', sigintHandler);
 
   try {
     const result = await syncEngine.sync(directory, {
@@ -123,7 +146,19 @@ export async function syncCommand(options: SyncCommandOptions): Promise<void> {
       force: options.force,
       depth: options.depth,
       progress: progressReporter,
+      signal: cancellation,
     });
+
+    // Clean up signal handler
+    process.off('SIGINT', sigintHandler);
+
+    // Handle cancellation
+    if (result.cancelled) {
+      console.log('');
+      console.log(chalk.yellow('Sync cancelled. Progress has been saved.'));
+      console.log(chalk.gray('Run "cn sync" again to continue.'));
+      process.exit(0);
+    }
 
     // For dry run, stop spinner and show diff
     if (options.dryRun) {
@@ -175,6 +210,7 @@ export async function syncCommand(options: SyncCommandOptions): Promise<void> {
       }
     }
   } catch (error) {
+    process.off('SIGINT', sigintHandler);
     spinner.fail('Sync failed');
     console.error(chalk.red(error instanceof Error ? error.message : 'Unknown error'));
     process.exit(EXIT_CODES.GENERAL_ERROR);
