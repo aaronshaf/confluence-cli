@@ -1,0 +1,25 @@
+# ADR - Architecture Decision Records
+
+Records of significant architectural decisions with context and rationale. Each ADR captures the why behind technical choices.
+
+## Records
+
+| ADR | Decision |
+|-----|----------|
+| [0001](0001-use-effect-for-error-handling.md) | Type-safe error handling with Effect |
+| [0002](0002-use-bun-runtime.md) | Bun as the JavaScript runtime |
+| [0003](0003-store-credentials-in-home-directory.md) | `~/.cn/config.json` for credentials |
+| [0004](0004-use-turndown-for-html-to-markdown.md) | Turndown for HTML conversion |
+| [0005](0005-use-nested-folders-for-page-hierarchy.md) | Directory structure mirrors page tree |
+| [0006](0006-use-comprehensive-frontmatter.md) | Rich YAML frontmatter metadata |
+| [0007](0007-one-way-sync-initial-release.md) | Confluence to local sync only (initially) |
+| [0008](0008-use-msw-for-api-mocking.md) | MSW for HTTP mocking in tests |
+| [0009](0009-git-hooks-for-quality.md) | Pre-commit hooks for code quality |
+| [0010](0010-exponential-backoff-for-rate-limits.md) | Retry strategy for API rate limits |
+| [0011](0011-llm-friendly-xml-output.md) | `--xml` flag for LLM consumption |
+| [0012](0012-confluence-cloud-only.md) | Cloud only, no Data Center support |
+| [0013](0013-typescript-isolated-declarations.md) | Explicit return types on exports |
+| [0014](0014-code-coverage-enforcement.md) | Coverage threshold in pre-commit |
+| [0015](0015-biome-configuration.md) | Biome linter/formatter settings |
+| [0016](0016-bunfig-toml-configuration.md) | Bun runtime and test config |
+| [0017](0017-dual-async-effect-api.md) | Both async and Effect methods |

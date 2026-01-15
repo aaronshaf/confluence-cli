@@ -1,0 +1,72 @@
+# cn - Confluence CLI
+
+CLI tool for syncing Atlassian Confluence spaces to local markdown files.
+
+## Project Documentation
+
+### `prd/` - Product Requirements Documents
+
+Product specifications and design documents:
+
+| File | Purpose |
+|------|---------|
+| `overview.md` | Project overview, goals, design decisions |
+| `architecture.md` | Technical architecture and component design |
+| `commands.md` | CLI command specifications |
+| `data-model.md` | Data structures, schemas, file formats |
+
+### `adr/` - Architecture Decision Records
+
+Records of significant architectural decisions with context and rationale:
+
+| ADR | Decision |
+|-----|----------|
+| `0001-use-effect-for-error-handling.md` | Type-safe error handling with Effect |
+| `0002-use-bun-runtime.md` | Bun as the JavaScript runtime |
+| `0003-store-credentials-in-home-directory.md` | `~/.cn/config.json` for credentials |
+| `0004-use-turndown-for-html-to-markdown.md` | Turndown for HTML conversion |
+| `0005-use-nested-folders-for-page-hierarchy.md` | Directory structure mirrors page tree |
+| `0006-use-comprehensive-frontmatter.md` | Rich YAML frontmatter metadata |
+| `0007-one-way-sync-initial-release.md` | Confluence → local sync only (initially) |
+| `0008-use-msw-for-api-mocking.md` | MSW for HTTP mocking in tests |
+| `0009-git-hooks-for-quality.md` | Pre-commit hooks for code quality |
+| `0010-exponential-backoff-for-rate-limits.md` | Retry strategy for API rate limits |
+| `0011-llm-friendly-xml-output.md` | `--xml` flag for LLM consumption |
+| `0012-confluence-cloud-only.md` | Cloud only, no Data Center support |
+| `0013-typescript-isolated-declarations.md` | Explicit return types on exports |
+| `0014-code-coverage-enforcement.md` | Coverage threshold in pre-commit |
+| `0015-biome-configuration.md` | Biome linter/formatter settings |
+| `0016-bunfig-toml-configuration.md` | Bun runtime and test config |
+| `0017-dual-async-effect-api.md` | Both async and Effect methods |
+
+## Style
+
+- No emoticons in documentation
+
+## Tech Stack
+
+- **Runtime**: Bun 1.2.0+
+- **Language**: TypeScript
+- **Error Handling**: Effect library
+- **HTML→MD**: turndown
+- **Linting**: Biome
+
+## Commands
+
+```bash
+cn setup     # Configure Confluence credentials
+cn sync      # Sync space to local folder
+cn status    # Check connection and sync status
+cn tree      # Display page hierarchy
+cn open      # Open page in browser
+```
+
+## Key Files
+
+- `~/.cn/config.json` - User credentials (600 permissions)
+- `.confluence.json` - Per-folder space configuration and sync state
+
+## Reference Projects
+
+- [`ji`](https://github.com/aaronshaf/ji) - Jira CLI (design patterns reference)
+- [`confluence-cli`](https://github.com/pchuri/confluence-cli) - Existing Confluence CLI
