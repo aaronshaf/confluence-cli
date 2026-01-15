@@ -4,6 +4,10 @@ CLI tool for syncing Atlassian Confluence spaces to local markdown files.
 
 ## Project Documentation
 
+**When implementing features:** Consult `docs/prd/` for specifications and `docs/adr/` for architectural context.
+
+**When making architectural decisions:** Create a new ADR in `docs/adr/` following the existing format (see `docs/adr/README.md`).
+
 ### `docs/prd/` - Product Requirements Documents
 
 Product specifications and design documents:
