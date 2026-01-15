@@ -186,18 +186,29 @@ export class SyncEngine {
    * Generate the local path for a page based on hierarchy
    * Per ADR-0005: Directory structure mirrors page tree
    * Per ADR-0018: Handles folders as parents in the hierarchy
+   *
+   * Space homepage (root page) becomes index.md at root, its children are at root level
    */
   private generateLocalPath(
     page: Page,
     pages: Page[],
     contentMap: Map<string, ContentItem>,
     existingPaths: Set<string>,
+    homepageId?: string,
   ): string {
+    // Space homepage becomes index.md at root
+    if (page.id === homepageId) {
+      const basePath = 'index.md';
+      existingPaths.add(basePath);
+      return basePath;
+    }
+
     const parentChain: string[] = [];
     let currentId: string | undefined | null = page.parentId;
 
     // Build parent chain (can include both pages and folders)
-    while (currentId) {
+    // Skip the homepage - its children should be at root level
+    while (currentId && currentId !== homepageId) {
       const parent = contentMap.get(currentId);
       if (parent) {
         parentChain.unshift(slugify(parent.title));
@@ -266,6 +277,11 @@ export class SyncEngine {
         contentMap.set(folder.id, folder);
       }
 
+      // Find the space homepage (root page with no parent)
+      // Homepage content goes to index.md, its children are at root level
+      const homepage = remotePages.find((p) => !p.parentId);
+      const homepageId = homepage?.id;
+
       // Compute diff
       const diff = options.force
         ? {
@@ -314,7 +330,7 @@ export class SyncEngine {
           result.warnings.push(...warnings.map((w) => `${page.title}: ${w}`));
 
           // Generate local path
-          const localPath = this.generateLocalPath(page, remotePages, contentMap, existingPaths);
+          const localPath = this.generateLocalPath(page, remotePages, contentMap, existingPaths, homepageId);
           (change as SyncChange).localPath = localPath;
 
           // Validate path stays within directory (prevents path traversal)
@@ -365,7 +381,8 @@ export class SyncEngine {
           result.warnings.push(...warnings.map((w) => `${page.title}: ${w}`));
 
           // Use existing path or generate new one
-          const localPath = change.localPath || this.generateLocalPath(page, remotePages, contentMap, existingPaths);
+          const localPath =
+            change.localPath || this.generateLocalPath(page, remotePages, contentMap, existingPaths, homepageId);
 
           // Validate path stays within directory (prevents path traversal)
           assertPathWithinDirectory(directory, localPath);

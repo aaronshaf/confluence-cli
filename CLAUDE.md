@@ -4,7 +4,7 @@ CLI tool for syncing Atlassian Confluence spaces to local markdown files.
 
 ## Project Documentation
 
-### `prd/` - Product Requirements Documents
+### `docs/prd/` - Product Requirements Documents
 
 Product specifications and design documents:
 
@@ -15,7 +15,7 @@ Product specifications and design documents:
 | `commands.md` | CLI command specifications |
 | `data-model.md` | Data structures, schemas, file formats |
 
-### `adr/` - Architecture Decision Records
+### `docs/adr/` - Architecture Decision Records
 
 Records of significant architectural decisions with context and rationale:
 
