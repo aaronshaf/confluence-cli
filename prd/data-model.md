@@ -1,0 +1,340 @@
+# cn - Data Model
+
+## Configuration Files
+
+### Global Config: `~/.cn/config.json`
+
+User credentials and global settings. File permissions: 600 (owner read/write only).
+
+```typescript
+interface Config {
+  confluenceUrl: string   // e.g., "https://company.atlassian.net"
+  email: string           // e.g., "user@example.com"
+  apiToken: string        // Confluence API token
+}
+```
+
+**Schema (Effect Schema):**
+
+```typescript
+const ConfigSchema = Schema.Struct({
+  confluenceUrl: Schema.String.pipe(
+    Schema.pattern(/^https:\/\/.+\.atlassian\.net$/)
+  ),
+  email: Schema.String.pipe(
+    Schema.pattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)
+  ),
+  apiToken: Schema.String.pipe(Schema.minLength(1))
+})
+```
+
+---
+
+### Space Config: `.confluence.json`
+
+Per-folder configuration specifying which Confluence space to sync.
+
+```typescript
+interface SpaceConfig {
+  spaceKey: string        // e.g., "ENG"
+  spaceId: string         // e.g., "123456"
+  spaceName: string       // e.g., "Engineering"
+  lastSync: string | null // ISO 8601 timestamp
+  syncState: SyncState
+}
+
+interface SyncState {
+  pages: Record<string, PageSyncInfo>
+}
+
+interface PageSyncInfo {
+  pageId: string
+  version: number
+  lastModified: string    // ISO 8601
+  localPath: string       // Relative path from root
+  contentHash: string     // MD5 hash of content
+  attachments: AttachmentSyncInfo[]
+}
+
+interface AttachmentSyncInfo {
+  attachmentId: string
+  filename: string
+  localPath: string
+  size: number
+  hash: string
+}
+```
+
+**Example:**
+
+```json
+{
+  "spaceKey": "ENG",
+  "spaceId": "123456",
+  "spaceName": "Engineering",
+  "lastSync": "2024-01-15T10:30:00Z",
+  "syncState": {
+    "pages": {
+      "page-abc-123": {
+        "pageId": "page-abc-123",
+        "version": 5,
+        "lastModified": "2024-01-14T08:00:00Z",
+        "localPath": "getting-started/index.md",
+        "contentHash": "a1b2c3d4e5f6",
+        "attachments": [
+          {
+            "attachmentId": "att-xyz-789",
+            "filename": "diagram.png",
+            "localPath": "getting-started/attachments/diagram.png",
+            "size": 45032,
+            "hash": "f6e5d4c3b2a1"
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+---
+
+## Markdown Frontmatter
+
+Every synced markdown file includes YAML frontmatter with page metadata.
+
+```typescript
+interface PageFrontmatter {
+  // Required
+  page_id: string
+  title: string
+  space_key: string
+
+  // Timestamps
+  created_at: string      // ISO 8601
+  updated_at: string      // ISO 8601
+
+  // Version info
+  version: number
+
+  // Hierarchy
+  parent_id: string | null
+  parent_title: string | null
+
+  // Author info
+  author_id: string
+  author_name: string
+  last_modifier_id: string
+  last_modifier_name: string
+
+  // Additional metadata
+  labels: string[]
+  url: string             // Full Confluence URL
+
+  // Sync metadata
+  synced_at: string       // ISO 8601
+}
+```
+
+**Example:**
+
+```yaml
+---
+page_id: "page-abc-123"
+title: "Getting Started"
+space_key: "ENG"
+created_at: "2023-06-15T09:00:00Z"
+updated_at: "2024-01-14T08:00:00Z"
+version: 5
+parent_id: "page-root-001"
+parent_title: "Home"
+author_id: "user-123"
+author_name: "John Doe"
+last_modifier_id: "user-456"
+last_modifier_name: "Jane Smith"
+labels:
+  - documentation
+  - onboarding
+url: "https://company.atlassian.net/wiki/spaces/ENG/pages/123456/Getting+Started"
+synced_at: "2024-01-15T10:30:00Z"
+---
+
+# Getting Started
+
+Page content here...
+```
+
+---
+
+## Confluence API Types
+
+### Space (from API)
+
+```typescript
+interface ConfluenceSpace {
+  id: string
+  key: string
+  name: string
+  type: "global" | "personal"
+  status: "current" | "archived"
+  homepageId: string
+  description?: {
+    plain?: { value: string }
+    view?: { value: string }
+  }
+  _links: {
+    webui: string
+    self: string
+  }
+}
+```
+
+### Page (from API)
+
+```typescript
+interface ConfluencePage {
+  id: string
+  status: "current" | "trashed" | "draft"
+  title: string
+  spaceId: string
+  parentId: string | null
+  parentType: "page" | null
+  position: number | null
+  authorId: string
+  ownerId: string
+  lastOwnerId: string
+  createdAt: string
+  version: {
+    number: number
+    message: string
+    minorEdit: boolean
+    authorId: string
+    createdAt: string
+  }
+  body?: {
+    storage?: { value: string }
+    atlas_doc_format?: { value: string }
+  }
+  _links: {
+    webui: string
+    editui: string
+    tinyui: string
+  }
+}
+```
+
+### Attachment (from API)
+
+```typescript
+interface ConfluenceAttachment {
+  id: string
+  status: "current" | "trashed"
+  title: string
+  mediaType: string
+  mediaTypeDescription: string
+  comment: string
+  fileId: string
+  fileSize: number
+  webuiLink: string
+  downloadLink: string
+  version: {
+    number: number
+    createdAt: string
+  }
+}
+```
+
+---
+
+## Internal Types
+
+### Page Tree
+
+```typescript
+interface PageTree {
+  root: PageNode
+  pages: Map<string, PageNode>  // pageId -> node
+}
+
+interface PageNode {
+  page: ConfluencePage
+  children: PageNode[]
+  depth: number
+  localPath: string | null
+}
+```
+
+### Sync Diff
+
+```typescript
+interface SyncDiff {
+  added: PageNode[]
+  modified: PageNode[]
+  deleted: PageSyncInfo[]
+  unchanged: PageSyncInfo[]
+}
+
+interface SyncResult {
+  added: number
+  modified: number
+  deleted: number
+  errors: SyncError[]
+  duration: number  // milliseconds
+}
+```
+
+---
+
+## File Naming Rules
+
+### Slugification
+
+```typescript
+function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '')     // Remove special chars
+    .replace(/[\s_]+/g, '-')       // Spaces to hyphens
+    .replace(/-+/g, '-')           // Collapse multiple hyphens
+    .replace(/^-|-$/g, '')         // Trim hyphens
+}
+```
+
+### Examples
+
+| Title | Filename |
+|-------|----------|
+| "Getting Started" | `getting-started.md` |
+| "API Reference" | `api-reference.md` |
+| "FAQ & Support" | `faq-support.md` |
+| "2024 Roadmap" | `2024-roadmap.md` |
+| "What's New?" | `whats-new.md` |
+
+### Conflict Resolution
+
+When multiple pages have the same slugified title:
+
+```
+page.md
+page-2.md
+page-3.md
+```
+
+The counter is appended before the extension. The original (first encountered) page gets no counter.
+
+### Directory Structure Rules
+
+1. Pages with children become directories with `index.md`
+2. Leaf pages are single `.md` files
+3. Attachments go in `attachments/` subdirectory
+
+```
+parent-page/
+├── index.md           # Parent page content
+├── attachments/
+│   └── image.png
+├── child-page.md      # Leaf child
+└── another-child/     # Child with grandchildren
+    ├── index.md
+    └── grandchild.md
+```
