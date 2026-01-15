@@ -380,24 +380,44 @@ export class SyncEngine {
           );
           result.warnings.push(...warnings.map((w) => `${page.title}: ${w}`));
 
-          // Use existing path or generate new one
-          const localPath =
-            change.localPath || this.generateLocalPath(page, remotePages, contentMap, existingPaths, homepageId);
+          // Always generate path based on current title/hierarchy
+          // This handles title changes by moving files to new locations
+          const newPath = this.generateLocalPath(page, remotePages, contentMap, existingPaths, homepageId);
+          const oldPath = change.localPath;
 
-          // Validate path stays within directory (prevents path traversal)
-          assertPathWithinDirectory(directory, localPath);
+          // If path changed (title or parent changed), delete old file
+          if (oldPath && oldPath !== newPath) {
+            assertPathWithinDirectory(directory, oldPath);
+            const oldFullPath = join(directory, oldPath);
+            if (existsSync(oldFullPath)) {
+              unlinkSync(oldFullPath);
+              // Clean up empty parent directories
+              let parentDir = dirname(oldFullPath);
+              while (parentDir !== directory) {
+                if (existsSync(parentDir) && readdirSync(parentDir).length === 0) {
+                  rmSync(parentDir, { recursive: true });
+                  parentDir = dirname(parentDir);
+                } else {
+                  break;
+                }
+              }
+            }
+          }
 
-          // Write file
-          const fullPath = join(directory, localPath);
+          // Validate new path stays within directory
+          assertPathWithinDirectory(directory, newPath);
+
+          // Write file at new location
+          const fullPath = join(directory, newPath);
           mkdirSync(dirname(fullPath), { recursive: true });
           writeFileSync(fullPath, markdown, 'utf-8');
 
-          // Update sync state
+          // Update sync state with new path
           const syncInfo: PageSyncInfo = {
             pageId: page.id,
             version: fullPage.version?.number || 1,
             lastModified: fullPage.version?.createdAt,
-            localPath,
+            localPath: newPath,
           };
           config = updatePageSyncInfo(config, syncInfo);
         } catch (error) {
