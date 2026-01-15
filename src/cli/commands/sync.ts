@@ -132,11 +132,19 @@ export async function syncCommand(options: SyncCommandOptions): Promise<void> {
   const cancellation = new CancellationToken();
 
   // Handle Ctrl+C gracefully
+  let sigintCount = 0;
   const sigintHandler = (): void => {
-    cancellation.cancel();
-    spinner.stop();
-    console.log('');
-    console.log(chalk.yellow('Cancelling sync... (saving progress)'));
+    sigintCount++;
+    if (sigintCount === 1) {
+      cancellation.cancel();
+      spinner.stop();
+      console.log('');
+      console.log(chalk.yellow('Cancelling sync... (press Ctrl+C again to force exit)'));
+    } else {
+      console.log('');
+      console.log(chalk.yellow('Force exiting...'));
+      process.exit(130); // Standard exit code for Ctrl+C
+    }
   };
   process.on('SIGINT', sigintHandler);
 
