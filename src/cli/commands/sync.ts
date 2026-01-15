@@ -32,19 +32,14 @@ function createProgressReporter(spinner: Ora): SyncProgressReporter {
         console.log('');
       }
     },
-    onPageStart: (index, total, title, type) => {
-      const icon = type === 'added' ? chalk.green('↓') : type === 'modified' ? chalk.yellow('↓') : chalk.red('×');
-      const label = type === 'added' ? 'new' : type === 'modified' ? 'modified' : 'deleted';
-      process.stdout.write(`  [${index}/${total}] ${icon} ${title} (${label})...`);
+    onPageStart: (_index, _total, _title, _type) => {
+      // No-op - we show progress on complete only
     },
     onPageComplete: (_index, _total, _title, localPath) => {
-      // Clear line and show completed path
-      process.stdout.write(`\r\x1b[K`);
       const icon = localPath ? chalk.green('✓') : chalk.red('×');
       console.log(`  ${icon} ${localPath || 'deleted'}`);
     },
     onPageError: (title, error) => {
-      process.stdout.write(`\r\x1b[K`);
       console.log(`  ${chalk.red('✗')} ${title}: ${error}`);
     },
   };
