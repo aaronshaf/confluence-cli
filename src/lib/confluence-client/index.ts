@@ -1,6 +1,9 @@
 export { ConfluenceClient } from './client.js';
 export type {
   Body,
+  ContentItem,
+  ContentTreeNode,
+  Folder,
   Label,
   LabelsResponse,
   Page,
@@ -13,6 +16,8 @@ export type {
 } from './types.js';
 export {
   BodySchema,
+  FolderSchema,
+  isFolder,
   LabelSchema,
   LabelsResponseSchema,
   PageSchema,

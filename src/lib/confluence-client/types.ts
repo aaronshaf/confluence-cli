@@ -99,7 +99,7 @@ export const PageSchema = Schema.Struct({
   spaceId: Schema.String,
   status: Schema.optional(Schema.String),
   parentId: Schema.optional(Schema.NullOr(Schema.String)),
-  parentType: Schema.optional(Schema.String),
+  parentType: Schema.optional(Schema.NullOr(Schema.String)),
   authorId: Schema.optional(Schema.String),
   ownerId: Schema.optional(Schema.String),
   createdAt: Schema.optional(Schema.String),
@@ -142,9 +142,46 @@ export const LabelsResponseSchema = Schema.Struct({
 export type LabelsResponse = Schema.Schema.Type<typeof LabelsResponseSchema>;
 
 /**
+ * Folder information from Confluence API v2
+ */
+export const FolderSchema = Schema.Struct({
+  id: Schema.String,
+  type: Schema.Literal('folder'),
+  title: Schema.String,
+  parentId: Schema.optional(Schema.NullOr(Schema.String)),
+  parentType: Schema.optional(Schema.NullOr(Schema.String)),
+  authorId: Schema.optional(Schema.String),
+  ownerId: Schema.optional(Schema.String),
+  createdAt: Schema.optional(Schema.Union(Schema.String, Schema.Number)),
+  status: Schema.optional(Schema.String),
+  version: Schema.optional(VersionSchema),
+});
+export type Folder = Schema.Schema.Type<typeof FolderSchema>;
+
+/**
+ * Content item - either a page or folder
+ */
+export type ContentItem = Page | Folder;
+
+/**
+ * Check if content item is a folder
+ */
+export function isFolder(item: ContentItem): item is Folder {
+  return 'type' in item && item.type === 'folder';
+}
+
+/**
  * Page with children tree structure (for building hierarchy)
  */
 export interface PageTreeNode {
   page: Page;
   children: PageTreeNode[];
+}
+
+/**
+ * Content tree node (page or folder with children)
+ */
+export interface ContentTreeNode {
+  item: ContentItem;
+  children: ContentTreeNode[];
 }

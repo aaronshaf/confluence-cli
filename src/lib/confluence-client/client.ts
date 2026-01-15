@@ -2,11 +2,13 @@ import { Effect, pipe, Schedule, Schema } from 'effect';
 import type { Config } from '../config.js';
 import { ApiError, AuthError, NetworkError, RateLimitError, SpaceNotFoundError } from '../errors.js';
 import {
+  FolderSchema,
   LabelsResponseSchema,
   PageSchema,
   PagesResponseSchema,
   SpaceSchema,
   SpacesResponseSchema,
+  type Folder,
   type Label,
   type LabelsResponse,
   type Page,
@@ -319,6 +321,66 @@ export class ConfluenceClient {
   async getAllLabels(pageId: string): Promise<Label[]> {
     const response = await this.getLabels(pageId, 100);
     return [...response.results];
+  }
+
+  // ================== Folders API ==================
+
+  /**
+   * Get a folder by ID (Effect version)
+   * Uses v2 /folders/{id} endpoint per ADR-0018
+   */
+  getFolderEffect(folderId: string): Effect.Effect<Folder, ApiError | AuthError | NetworkError | RateLimitError> {
+    return this.fetchWithRetryEffect(`/folders/${folderId}`, FolderSchema);
+  }
+
+  /**
+   * Get a folder by ID (async version)
+   */
+  async getFolder(folderId: string): Promise<Folder> {
+    return Effect.runPromise(this.getFolderEffect(folderId));
+  }
+
+  /**
+   * Discover and fetch all folders referenced by pages
+   * Finds pages with parentIds that don't match any page and fetches those as folders
+   */
+  async discoverFolders(pages: Page[]): Promise<Folder[]> {
+    const pageIds = new Set(pages.map((p) => p.id));
+    const potentialFolderIds = new Set<string>();
+
+    // Find parentIds that aren't pages
+    for (const page of pages) {
+      if (page.parentId && !pageIds.has(page.parentId)) {
+        potentialFolderIds.add(page.parentId);
+      }
+    }
+
+    // Fetch each potential folder
+    const folders: Folder[] = [];
+    for (const folderId of potentialFolderIds) {
+      try {
+        const folder = await this.getFolder(folderId);
+        folders.push(folder);
+
+        // Check if this folder's parent is also a folder we need
+        if (folder.parentId && !pageIds.has(folder.parentId) && !potentialFolderIds.has(folder.parentId)) {
+          potentialFolderIds.add(folder.parentId);
+        }
+      } catch {
+        // Silently skip if folder fetch fails (might be deleted)
+      }
+    }
+
+    return folders;
+  }
+
+  /**
+   * Get all pages and folders in a space
+   */
+  async getAllContentInSpace(spaceId: string): Promise<{ pages: Page[]; folders: Folder[] }> {
+    const pages = await this.getAllPagesInSpace(spaceId);
+    const folders = await this.discoverFolders(pages);
+    return { pages, folders };
   }
 
   // ================== Verification ==================

@@ -1,6 +1,13 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { ConfluenceClient, type Page, type PageTreeNode } from '../confluence-client/index.js';
+import {
+  ConfluenceClient,
+  isFolder,
+  type ContentItem,
+  type Folder,
+  type Page,
+  type PageTreeNode,
+} from '../confluence-client/index.js';
 import type { Config } from '../config.js';
 import { SyncError } from '../errors.js';
 import { MarkdownConverter, slugify } from '../markdown/index.js';
@@ -178,21 +185,29 @@ export class SyncEngine {
   /**
    * Generate the local path for a page based on hierarchy
    * Per ADR-0005: Directory structure mirrors page tree
+   * Per ADR-0018: Handles folders as parents in the hierarchy
    */
-  private generateLocalPath(page: Page, pages: Page[], existingPaths: Set<string>): string {
+  private generateLocalPath(
+    page: Page,
+    pages: Page[],
+    contentMap: Map<string, ContentItem>,
+    existingPaths: Set<string>,
+  ): string {
     const parentChain: string[] = [];
-    let currentPage: Page | undefined = page;
-    const pageMap = new Map(pages.map((p) => [p.id, p]));
+    let currentId: string | undefined | null = page.parentId;
 
-    // Build parent chain
-    while (currentPage?.parentId) {
-      currentPage = pageMap.get(currentPage.parentId);
-      if (currentPage) {
-        parentChain.unshift(slugify(currentPage.title));
+    // Build parent chain (can include both pages and folders)
+    while (currentId) {
+      const parent = contentMap.get(currentId);
+      if (parent) {
+        parentChain.unshift(slugify(parent.title));
+        currentId = parent.parentId;
+      } else {
+        break;
       }
     }
 
-    // Check if page has children
+    // Check if page has children (pages or folders can be parents)
     const hasChildren = pages.some((p) => p.parentId === page.id);
     const slug = slugify(page.title);
 
@@ -239,11 +254,17 @@ export class SyncEngine {
         throw new SyncError('No space configuration found. Run "cn sync --init <SPACE_KEY>" first.');
       }
 
-      // Fetch all pages
-      const remotePages = await this.fetchPageTree(config.spaceId);
+      // Fetch all pages and folders (per ADR-0018)
+      const { pages: remotePages, folders } = await this.client.getAllContentInSpace(config.spaceId);
 
-      // Build page map for parent lookup
-      const pageMap = new Map(remotePages.map((p) => [p.id, p]));
+      // Build combined content map for parent lookup (includes both pages and folders)
+      const contentMap = new Map<string, ContentItem>();
+      for (const page of remotePages) {
+        contentMap.set(page.id, page);
+      }
+      for (const folder of folders) {
+        contentMap.set(folder.id, folder);
+      }
 
       // Compute diff
       const diff = options.force
@@ -279,8 +300,8 @@ export class SyncEngine {
           // Get labels
           const labels = await this.client.getAllLabels(page.id);
 
-          // Get parent title
-          const parentTitle = page.parentId ? pageMap.get(page.parentId)?.title : undefined;
+          // Get parent title (can be page or folder)
+          const parentTitle = page.parentId ? contentMap.get(page.parentId)?.title : undefined;
 
           // Convert to markdown
           const { markdown, warnings } = this.converter.convertPage(
@@ -293,7 +314,7 @@ export class SyncEngine {
           result.warnings.push(...warnings.map((w) => `${page.title}: ${w}`));
 
           // Generate local path
-          const localPath = this.generateLocalPath(page, remotePages, existingPaths);
+          const localPath = this.generateLocalPath(page, remotePages, contentMap, existingPaths);
           (change as SyncChange).localPath = localPath;
 
           // Validate path stays within directory (prevents path traversal)
@@ -330,8 +351,8 @@ export class SyncEngine {
           // Get labels
           const labels = await this.client.getAllLabels(page.id);
 
-          // Get parent title
-          const parentTitle = page.parentId ? pageMap.get(page.parentId)?.title : undefined;
+          // Get parent title (can be page or folder)
+          const parentTitle = page.parentId ? contentMap.get(page.parentId)?.title : undefined;
 
           // Convert to markdown
           const { markdown, warnings } = this.converter.convertPage(
@@ -344,7 +365,7 @@ export class SyncEngine {
           result.warnings.push(...warnings.map((w) => `${page.title}: ${w}`));
 
           // Use existing path or generate new one
-          const localPath = change.localPath || this.generateLocalPath(page, remotePages, existingPaths);
+          const localPath = change.localPath || this.generateLocalPath(page, remotePages, contentMap, existingPaths);
 
           // Validate path stays within directory (prevents path traversal)
           assertPathWithinDirectory(directory, localPath);

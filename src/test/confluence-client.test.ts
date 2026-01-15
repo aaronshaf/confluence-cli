@@ -189,6 +189,57 @@ describe('ConfluenceClient', () => {
     });
   });
 
+  describe('getFolder', () => {
+    test('returns folder by ID', async () => {
+      const client = new ConfluenceClient(testConfig);
+      const folder = await client.getFolder('folder-123');
+
+      expect(folder.id).toBe('folder-123');
+      expect(folder.type).toBe('folder');
+      expect(folder.title).toBeDefined();
+    });
+  });
+
+  describe('discoverFolders', () => {
+    test('discovers folders referenced by pages', async () => {
+      server.use(
+        http.get('*/wiki/api/v2/folders/:folderId', ({ params }) => {
+          return HttpResponse.json({
+            id: params.folderId,
+            type: 'folder',
+            title: `Folder ${params.folderId}`,
+            parentId: 'page-1', // Parent is a known page, not another folder
+            parentType: 'page',
+          });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+      const pages = [
+        { id: 'page-1', title: 'Page 1', spaceId: 'space-1', parentId: null },
+        { id: 'page-2', title: 'Page 2', spaceId: 'space-1', parentId: 'folder-1' },
+        { id: 'page-3', title: 'Page 3', spaceId: 'space-1', parentId: 'page-1' },
+      ];
+
+      const folders = await client.discoverFolders(pages);
+
+      expect(folders).toHaveLength(1);
+      expect(folders[0].id).toBe('folder-1');
+    });
+
+    test('returns empty array when no folders referenced', async () => {
+      const client = new ConfluenceClient(testConfig);
+      const pages = [
+        { id: 'page-1', title: 'Page 1', spaceId: 'space-1', parentId: null },
+        { id: 'page-2', title: 'Page 2', spaceId: 'space-1', parentId: 'page-1' },
+      ];
+
+      const folders = await client.discoverFolders(pages);
+
+      expect(folders).toHaveLength(0);
+    });
+  });
+
   describe('rate limiting', () => {
     test('handles 429 responses', async () => {
       let requestCount = 0;

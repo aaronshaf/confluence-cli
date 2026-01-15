@@ -48,6 +48,38 @@ export function createValidSpace(
 }
 
 /**
+ * Create a valid folder object for mocking
+ */
+export function createValidFolder(
+  overrides: Partial<{
+    id: string;
+    title: string;
+    parentId: string | null;
+    parentType: string | null;
+  }> = {},
+): {
+  id: string;
+  type: 'folder';
+  title: string;
+  parentId?: string | null;
+  parentType?: string | null;
+  authorId?: string;
+  ownerId?: string;
+  status?: string;
+} {
+  return {
+    id: overrides.id || 'folder-123',
+    type: 'folder',
+    title: overrides.title || 'Test Folder',
+    parentId: overrides.parentId,
+    parentType: overrides.parentType,
+    authorId: 'user-123',
+    ownerId: 'user-123',
+    status: 'current',
+  };
+}
+
+/**
  * Create a valid page object for mocking
  */
 export function createValidPage(

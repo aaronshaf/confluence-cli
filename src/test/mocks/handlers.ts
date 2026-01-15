@@ -1,11 +1,12 @@
 import { HttpResponse, http } from 'msw';
 import {
+  FolderSchema,
   SpaceSchema,
   SpacesResponseSchema,
   PagesResponseSchema,
   PageSchema,
 } from '../../lib/confluence-client/types.js';
-import { createValidPage, createValidSpace, validateAndReturn } from '../msw-schema-validation.js';
+import { createValidFolder, createValidPage, createValidSpace, validateAndReturn } from '../msw-schema-validation.js';
 
 /**
  * Shared MSW handlers with schema validation
@@ -76,6 +77,17 @@ export const handlers = [
   // Confluence labels mock
   http.get('*/wiki/api/v2/pages/:pageId/labels', () => {
     return HttpResponse.json({ results: [] });
+  }),
+
+  // Confluence folder mock
+  http.get('*/wiki/api/v2/folders/:folderId', ({ params }) => {
+    const folder = createValidFolder({
+      id: params.folderId as string,
+      title: 'Test Folder',
+      parentId: 'page-1',
+      parentType: 'page',
+    });
+    return HttpResponse.json(validateAndReturn(FolderSchema, folder, 'Single Folder'));
   }),
 
   // CATCH-ALL: Return 404 for any unhandled requests

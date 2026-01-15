@@ -8,13 +8,26 @@ CLI for syncing Confluence spaces to local markdown.
 bun install -g @aaronshaf/cn
 ```
 
-## Setup
+## Getting Started
 
 ```bash
+# 1. Configure your Confluence credentials
 cn setup
+
+# 2. Create a directory for the space
+mkdir my-space && cd my-space
+
+# 3. Initialize the space
+cn sync --init <SPACE_KEY>
+
+# 4. Download the pages
+cn sync
 ```
 
-Stores credentials in `~/.cn/config.json`.
+The space key is the identifier in your Confluence URL:
+`https://yoursite.atlassian.net/wiki/spaces/<SPACE_KEY>/...`
+
+Credentials are stored in `~/.cn/config.json`. Space configuration is saved to `.confluence.json` in the synced directory.
 
 ## Usage
 

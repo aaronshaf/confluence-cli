@@ -38,6 +38,7 @@ Records of significant architectural decisions with context and rationale:
 | `0015-biome-configuration.md` | Biome linter/formatter settings |
 | `0016-bunfig-toml-configuration.md` | Bun runtime and test config |
 | `0017-dual-async-effect-api.md` | Both async and Effect methods |
+| `0018-confluence-folder-support.md` | V2 API folder discovery for hierarchy |
 
 ## Style
 

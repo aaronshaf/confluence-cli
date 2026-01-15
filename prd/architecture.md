@@ -82,6 +82,7 @@ class ConfluenceClient extends ConfluenceClientBase {
 - `GET /wiki/api/v2/pages` - List pages (with pagination)
 - `GET /wiki/api/v2/pages/{id}` - Get page content
 - `GET /wiki/api/v2/pages/{id}/children` - Get child pages
+- `GET /wiki/api/v2/folders/{id}` - Get folder details (discovered via page parentIds)
 
 **Authentication:**
 - Basic Auth: `email:apiToken` base64 encoded
@@ -107,12 +108,14 @@ class SyncEngine {
 **Sync Algorithm:**
 1. Load local `.confluence.json` and sync state
 2. Fetch page tree from Confluence API
-3. Compute diff (added, modified, deleted pages)
-4. For each changed page:
+3. Discover folders referenced by pages (via parentId) and fetch folder details
+4. Compute diff (added, modified, deleted pages)
+5. For each changed page:
    - Fetch full content
    - Convert HTML → Markdown
+   - Resolve path including folder hierarchy
    - Write to filesystem
-5. Update sync state
+6. Update sync state
 
 ### 4. MarkdownConverter
 
