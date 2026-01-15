@@ -1,0 +1,70 @@
+{
+  "name": "@aaronshaf/cn",
+  "version": "0.1.0",
+  "description": "Confluence CLI for syncing spaces to local markdown files",
+  "type": "module",
+  "bin": {
+    "cn": "./src/cli.ts"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
+  "engines": {
+    "bun": ">=1.2.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aaronshaf/cn.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aaronshaf/cn/issues"
+  },
+  "homepage": "https://github.com/aaronshaf/cn#readme",
+  "scripts": {
+    "dev": "bun run --watch src/cli.ts",
+    "test": "BUN_TEST_JOBS=1 NODE_ENV=test bun test",
+    "test:coverage": "BUN_TEST_JOBS=1 NODE_ENV=test bun test --coverage",
+    "test:coverage:report": "BUN_TEST_JOBS=1 NODE_ENV=test bun test --coverage --coverage-reporter=text",
+    "test:coverage:check": "BUN_TEST_JOBS=1 NODE_ENV=test bun test --coverage --coverage-threshold=70",
+    "check-file-sizes": "bun run scripts/check-file-sizes.ts",
+    "lint": "biome check",
+    "lint:fix": "biome check --write",
+    "format": "biome format --write",
+    "typecheck": "tsc --noEmit",
+    "cn": "bun run src/cli.ts",
+    "prepublishOnly": "bun run lint && bun run typecheck",
+    "pre-commit": "bun run typecheck && biome check --write && bun run check-file-sizes && bun run test:coverage:check",
+    "prepare": "node scripts/install-hooks.cjs"
+  },
+  "keywords": [
+    "confluence",
+    "cli",
+    "markdown",
+    "sync"
+  ],
+  "author": "Aaron Shafovaloff <aaronshaf@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@effect/schema": "^0.75.5",
+    "@inquirer/prompts": "^7.8.4",
+    "chalk": "^5.4.1",
+    "effect": "^3.16.10",
+    "gray-matter": "^4.0.3",
+    "ora": "^8.2.0",
+    "turndown": "^7.2.0",
+    "turndown-plugin-gfm": "^1.0.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.6",
+    "@types/turndown": "^5.0.5",
+    "bun-types": "^1.0.20",
+    "msw": "^2.10.4",
+    "typescript": "^5.3.3"
+  }
+}

@@ -1,0 +1,11 @@
+[test]
+# Preload setup file to ensure global hooks run for all tests
+preload = ["./src/test/setup-msw.ts"]
+
+# Enable coverage
+coverage = true
+coverageDir = "./coverage"
+
+[install]
+# Use exact versions
+exact = true

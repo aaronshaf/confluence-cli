@@ -1,0 +1,244 @@
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { existsSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { http, HttpResponse } from 'msw';
+import { SyncEngine } from '../lib/sync/sync-engine.js';
+import { writeSpaceConfig, type SpaceConfigWithState } from '../lib/space-config.js';
+import { server } from './setup-msw.js';
+import { createValidPage, createValidSpace } from './msw-schema-validation.js';
+
+const testConfig = {
+  confluenceUrl: 'https://test.atlassian.net',
+  email: 'test@example.com',
+  apiToken: 'test-token',
+};
+
+describe('SyncEngine', () => {
+  let testDir: string;
+
+  beforeEach(() => {
+    testDir = join(tmpdir(), `cn-test-${Date.now()}`);
+    mkdirSync(testDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    if (existsSync(testDir)) {
+      rmSync(testDir, { recursive: true });
+    }
+  });
+
+  describe('initSync', () => {
+    test('initializes sync for a space', async () => {
+      server.use(
+        http.get('*/wiki/api/v2/spaces', ({ request }) => {
+          const url = new URL(request.url);
+          const keys = url.searchParams.get('keys');
+          if (keys === 'TEST') {
+            return HttpResponse.json({
+              results: [createValidSpace({ id: 'space-123', key: 'TEST', name: 'Test Space' })],
+            });
+          }
+          return HttpResponse.json({ results: [] });
+        }),
+      );
+
+      const engine = new SyncEngine(testConfig);
+      const config = await engine.initSync(testDir, 'TEST');
+
+      expect(config.spaceKey).toBe('TEST');
+      expect(config.spaceId).toBe('space-123');
+      expect(config.spaceName).toBe('Test Space');
+
+      // Check that .confluence.json was created
+      const configPath = join(testDir, '.confluence.json');
+      expect(existsSync(configPath)).toBe(true);
+    });
+  });
+
+  describe('fetchPageTree', () => {
+    test('fetches all pages in a space', async () => {
+      const engine = new SyncEngine(testConfig);
+      const pages = await engine.fetchPageTree('space-123');
+
+      expect(pages).toBeArray();
+    });
+  });
+
+  describe('buildPageTree', () => {
+    test('builds tree from flat pages', () => {
+      const pages = [
+        { id: 'page-1', title: 'Home', spaceId: 'space-123', parentId: null },
+        { id: 'page-2', title: 'Getting Started', spaceId: 'space-123', parentId: 'page-1' },
+        { id: 'page-3', title: 'API Reference', spaceId: 'space-123', parentId: 'page-1' },
+        { id: 'page-4', title: 'Installation', spaceId: 'space-123', parentId: 'page-2' },
+      ];
+
+      const engine = new SyncEngine(testConfig);
+      const tree = engine.buildPageTree(pages);
+
+      expect(tree).toHaveLength(1);
+      expect(tree[0].page.title).toBe('Home');
+      expect(tree[0].children).toHaveLength(2);
+    });
+
+    test('handles orphan pages', () => {
+      const pages = [
+        { id: 'page-1', title: 'Page 1', spaceId: 'space-123', parentId: 'missing-parent' },
+        { id: 'page-2', title: 'Page 2', spaceId: 'space-123', parentId: null },
+      ];
+
+      const engine = new SyncEngine(testConfig);
+      const tree = engine.buildPageTree(pages);
+
+      expect(tree).toHaveLength(2);
+    });
+  });
+
+  describe('computeDiff', () => {
+    test('detects added pages', () => {
+      const remotePages = [
+        { id: 'page-1', title: 'Page 1', spaceId: 'space-123', version: { number: 1 } },
+        { id: 'page-2', title: 'Page 2', spaceId: 'space-123', version: { number: 1 } },
+      ];
+
+      const localConfig: SpaceConfigWithState = {
+        spaceKey: 'TEST',
+        spaceId: 'space-123',
+        spaceName: 'Test Space',
+        pages: {},
+      };
+
+      const engine = new SyncEngine(testConfig);
+      const diff = engine.computeDiff(remotePages, localConfig);
+
+      expect(diff.added).toHaveLength(2);
+      expect(diff.modified).toHaveLength(0);
+      expect(diff.deleted).toHaveLength(0);
+    });
+
+    test('detects modified pages', () => {
+      const remotePages = [{ id: 'page-1', title: 'Page 1', spaceId: 'space-123', version: { number: 2 } }];
+
+      const localConfig: SpaceConfigWithState = {
+        spaceKey: 'TEST',
+        spaceId: 'space-123',
+        spaceName: 'Test Space',
+        pages: {
+          'page-1': { pageId: 'page-1', version: 1, localPath: 'page-1.md' },
+        },
+      };
+
+      const engine = new SyncEngine(testConfig);
+      const diff = engine.computeDiff(remotePages, localConfig);
+
+      expect(diff.added).toHaveLength(0);
+      expect(diff.modified).toHaveLength(1);
+      expect(diff.deleted).toHaveLength(0);
+    });
+
+    test('detects deleted pages', () => {
+      const remotePages: any[] = [];
+
+      const localConfig: SpaceConfigWithState = {
+        spaceKey: 'TEST',
+        spaceId: 'space-123',
+        spaceName: 'Test Space',
+        pages: {
+          'page-1': { pageId: 'page-1', version: 1, localPath: 'page-1.md' },
+        },
+      };
+
+      const engine = new SyncEngine(testConfig);
+      const diff = engine.computeDiff(remotePages, localConfig);
+
+      expect(diff.added).toHaveLength(0);
+      expect(diff.modified).toHaveLength(0);
+      expect(diff.deleted).toHaveLength(1);
+    });
+
+    test('handles null localConfig', () => {
+      const remotePages = [{ id: 'page-1', title: 'Page 1', spaceId: 'space-123', version: { number: 1 } }];
+
+      const engine = new SyncEngine(testConfig);
+      const diff = engine.computeDiff(remotePages, null);
+
+      expect(diff.added).toHaveLength(1);
+      expect(diff.modified).toHaveLength(0);
+      expect(diff.deleted).toHaveLength(0);
+    });
+  });
+
+  describe('sync', () => {
+    test('fails without space configuration', async () => {
+      const engine = new SyncEngine(testConfig);
+      const result = await engine.sync(testDir);
+
+      expect(result.success).toBe(false);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]).toContain('No space configuration found');
+    });
+
+    test('performs dry run without changes', async () => {
+      // Set up space config
+      const spaceConfig: SpaceConfigWithState = {
+        spaceKey: 'TEST',
+        spaceId: 'space-123',
+        spaceName: 'Test Space',
+        pages: {},
+      };
+      writeSpaceConfig(testDir, spaceConfig);
+
+      const engine = new SyncEngine(testConfig);
+      const result = await engine.sync(testDir, { dryRun: true });
+
+      expect(result.success).toBe(true);
+      // In dry run, no files should be created
+      const files = existsSync(join(testDir, 'home.md'));
+      expect(files).toBe(false);
+    });
+
+    test('syncs new pages', async () => {
+      // Set up mocks for pages
+      server.use(
+        http.get('*/wiki/api/v2/spaces/:spaceId/pages', () => {
+          return HttpResponse.json({
+            results: [
+              createValidPage({
+                id: 'page-1',
+                title: 'Home',
+                spaceId: 'space-123',
+                body: '<p>Welcome!</p>',
+              }),
+            ],
+          });
+        }),
+        http.get('*/wiki/api/v2/pages/:pageId', ({ params }) => {
+          return HttpResponse.json(
+            createValidPage({
+              id: params.pageId as string,
+              title: 'Home',
+              spaceId: 'space-123',
+              body: '<p>Welcome!</p>',
+            }),
+          );
+        }),
+      );
+
+      // Set up space config
+      const spaceConfig: SpaceConfigWithState = {
+        spaceKey: 'TEST',
+        spaceId: 'space-123',
+        spaceName: 'Test Space',
+        pages: {},
+      };
+      writeSpaceConfig(testDir, spaceConfig);
+
+      const engine = new SyncEngine(testConfig);
+      const result = await engine.sync(testDir);
+
+      expect(result.success).toBe(true);
+      expect(result.changes.added).toHaveLength(1);
+    });
+  });
+});
