@@ -66,23 +66,42 @@ cn sync --init <SPACE_KEY>
 ```
 --init <key>     Initialize sync for a space (creates .confluence.json)
 --dry-run        Show what would be synced without making changes
---force          Force full re-sync (ignore local state)
+--force          Full re-sync (re-download all pages)
 --depth <n>      Limit sync depth (default: unlimited)
 ```
+
+### Sync Modes
+
+**Smart Sync (default):**
+- Only syncs pages where remote version > local version
+- Handles title/parent changes by moving local files
+- Most efficient for regular use
+
+**Full Sync (`--force`):**
+- Re-downloads all pages regardless of local state
+- Use when local state may be corrupted
+- Treats all pages as "added"
 
 ### Behavior
 
 **With `--init`:**
 1. Verify space exists
 2. Create `.confluence.json` with space metadata
-3. Perform initial sync
+3. Print instructions to run `cn sync`
 
-**Without `--init`:**
+**Smart Sync (default):**
 1. Read `.confluence.json` from current directory
-2. Compare remote state with local sync state
+2. Compare remote versions with local sync state
 3. Download new/modified pages
-4. Remove deleted pages (with confirmation)
-5. Update sync state
+4. Move files if title/parent changed
+5. Remove deleted pages
+6. Update sync state
+
+**Full Sync (`--full`):**
+1. Read `.confluence.json` from current directory
+2. Treat all remote pages as "added"
+3. Re-download all pages
+4. Update sync state
 
 ### Output
 

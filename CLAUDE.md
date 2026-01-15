@@ -43,6 +43,7 @@ Records of significant architectural decisions with context and rationale:
 | `0016-bunfig-toml-configuration.md` | Bun runtime and test config |
 | `0017-dual-async-effect-api.md` | Both async and Effect methods |
 | `0018-confluence-folder-support.md` | V2 API folder discovery for hierarchy |
+| `0019-sync-modes.md` | Smart vs full sync modes |
 
 ## Style
 

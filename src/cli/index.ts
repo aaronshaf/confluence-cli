@@ -52,6 +52,16 @@ ${chalk.yellow('Description:')}
   Syncs a Confluence space to the current directory.
   Use --init to initialize sync for a new space.
 
+${chalk.yellow('Sync Modes:')}
+  ${chalk.cyan('Smart sync (default)')}
+    Only syncs pages that have changed since last sync.
+    Compares version numbers to detect modifications.
+    Handles renames and moves automatically.
+
+  ${chalk.cyan('Full sync (--force)')}
+    Re-downloads all pages regardless of local state.
+    Use when local state may be corrupted or out of sync.
+
 ${chalk.yellow('Options:')}
   --init <SPACE_KEY>        Initialize sync for a space
   --dry-run                 Show what would be synced without making changes
@@ -61,9 +71,9 @@ ${chalk.yellow('Options:')}
 
 ${chalk.yellow('Examples:')}
   cn sync --init DOCS       Initialize sync for DOCS space
-  cn sync                   Sync changes from Confluence
+  cn sync                   Smart sync (only changes)
   cn sync --dry-run         Preview changes
-  cn sync --force           Full re-sync
+  cn sync --force           Full re-sync all pages
 `);
 }
 
