@@ -15,7 +15,8 @@ cn/
 │   │       ├── push.ts           # cn push
 │   │       ├── status.ts         # cn status
 │   │       ├── tree.ts           # cn tree
-│   │       └── open.ts           # cn open
+│   │       ├── open.ts           # cn open
+│   │       └── search.ts         # cn search
 │   ├── lib/
 │   │   ├── config.ts             # ConfigManager (~/.cn/config.json)
 │   │   ├── confluence-client/
@@ -33,6 +34,11 @@ cn/
 │   │   │   ├── html-converter.ts # Markdown → HTML (marked)
 │   │   │   ├── frontmatter.ts    # YAML frontmatter handling
 │   │   │   └── slugify.ts        # Title → filename
+│   │   ├── search/
+│   │   │   ├── index.ts          # Search facade
+│   │   │   ├── client.ts         # Meilisearch client wrapper
+│   │   │   ├── indexer.ts        # Scan files and build index
+│   │   │   └── types.ts          # Search types
 │   │   ├── file-scanner.ts       # Detect changed files for push
 │   │   └── space-config.ts       # .confluence.json handling
 │   └── test/
@@ -285,6 +291,7 @@ const syncSpace = (spaceKey: string): Effect<
 - `@effect/schema` - Schema validation
 - `turndown` - HTML to Markdown (pull)
 - `marked` - Markdown to HTML (push)
+- `meilisearch` - Search engine client (for `cn search`)
 - `@inquirer/prompts` - Interactive prompts
 - `chalk` - Terminal colors
 - `ora` - Spinners

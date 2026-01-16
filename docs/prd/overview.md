@@ -14,7 +14,6 @@
 ## Non-Goals
 
 - Real-time sync or file watching
-- Search functionality (rely on local tools like grep, ripgrep)
 - Collaborative editing features
 - Automatic push (no background file watching/auto-push)
 
@@ -44,6 +43,7 @@
 | `cn status` | Check connection and sync status |
 | `cn tree` | Display space hierarchy as tree |
 | `cn open [page]` | Open page in browser |
+| `cn search` | Search indexed content (requires Meilisearch) |
 
 ## User Flows
 

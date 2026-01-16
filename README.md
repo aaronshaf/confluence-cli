@@ -59,12 +59,35 @@ cn tree
 
 # Open page in browser
 cn open
+
+# Search local content (requires Meilisearch)
+cn search "query"
+cn search "api" --labels documentation
+cn search index
+cn search status
+```
+
+## Search
+
+Search requires [Meilisearch](https://www.meilisearch.com/) running locally:
+
+```bash
+# Start Meilisearch
+docker run -d -p 7700:7700 getmeili/meilisearch:latest
+
+# Build the search index
+cn search index
+
+# Search
+cn search "authentication"
+cn search "api" --labels documentation --limit 5
 ```
 
 ## Requirements
 
 - Bun 1.2.0+
 - Confluence Cloud account
+- Meilisearch (optional, for search)
 
 ## Development
 

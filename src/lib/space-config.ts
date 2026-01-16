@@ -13,6 +13,17 @@ const PageSyncInfoSchema = Schema.Struct({
 });
 
 /**
+ * Search configuration schema for Meilisearch integration
+ */
+const SearchConfigSchema = Schema.Struct({
+  meilisearchUrl: Schema.optional(Schema.String),
+  apiKey: Schema.optional(Schema.NullOr(Schema.String)),
+  indexName: Schema.optional(Schema.String),
+});
+
+export type SearchConfig = Schema.Schema.Type<typeof SearchConfigSchema>;
+
+/**
  * Page sync information stored in .confluence.json
  */
 export type PageSyncInfo = Schema.Schema.Type<typeof PageSyncInfoSchema>;
@@ -40,6 +51,7 @@ const SpaceConfigWithStateSchema = Schema.Struct({
   lastSync: Schema.optional(Schema.String),
   syncState: Schema.optional(Schema.Record({ key: Schema.String, value: Schema.Any })),
   pages: Schema.Record({ key: Schema.String, value: PageSyncInfoSchema }),
+  search: Schema.optional(SearchConfigSchema),
 });
 
 /**

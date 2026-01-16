@@ -162,6 +162,34 @@ export class VersionConflictError extends Error {
 }
 
 /**
+ * Meilisearch connection errors
+ */
+export class MeilisearchConnectionError extends Error {
+  readonly _tag = 'MeilisearchConnectionError' as const;
+  readonly url: string;
+
+  constructor(url: string) {
+    super(`Meilisearch not available at ${url}. Start it with: docker run -d -p 7700:7700 getmeili/meilisearch:latest`);
+    this.name = 'MeilisearchConnectionError';
+    this.url = url;
+  }
+}
+
+/**
+ * Meilisearch index errors
+ */
+export class MeilisearchIndexError extends Error {
+  readonly _tag = 'MeilisearchIndexError' as const;
+  readonly indexName: string;
+
+  constructor(indexName: string, message: string) {
+    super(message);
+    this.name = 'MeilisearchIndexError';
+    this.indexName = indexName;
+  }
+}
+
+/**
  * Union type of all error types for comprehensive error handling
  */
 export type CnError =
@@ -176,7 +204,9 @@ export type CnError =
   | NetworkError
   | SpaceNotFoundError
   | PageNotFoundError
-  | VersionConflictError;
+  | VersionConflictError
+  | MeilisearchConnectionError
+  | MeilisearchIndexError;
 
 /**
  * Exit codes for CLI
@@ -191,6 +221,8 @@ export const EXIT_CODES = {
   INVALID_ARGUMENTS: 6,
   PAGE_NOT_FOUND: 7,
   VERSION_CONFLICT: 8,
+  MEILISEARCH_CONNECTION: 9,
+  MEILISEARCH_INDEX: 10,
 } as const;
 
 /**
@@ -212,6 +244,10 @@ export function getExitCodeForError(error: CnError): number {
       return EXIT_CODES.PAGE_NOT_FOUND;
     case 'VersionConflictError':
       return EXIT_CODES.VERSION_CONFLICT;
+    case 'MeilisearchConnectionError':
+      return EXIT_CODES.MEILISEARCH_CONNECTION;
+    case 'MeilisearchIndexError':
+      return EXIT_CODES.MEILISEARCH_INDEX;
     default:
       return EXIT_CODES.GENERAL_ERROR;
   }

@@ -57,6 +57,7 @@
     "effect": "^3.16.10",
     "gray-matter": "^4.0.3",
     "marked": "17.0.1",
+    "meilisearch": "^0.44.0",
     "ora": "^8.2.0",
     "turndown": "^7.2.0",
     "turndown-plugin-gfm": "^1.0.2"

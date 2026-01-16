@@ -8,6 +8,7 @@ import { cloneCommand } from './commands/clone.js';
 import { openCommand } from './commands/open.js';
 import { pullCommand } from './commands/pull.js';
 import { pushCommand } from './commands/push.js';
+import { searchCommand } from './commands/search.js';
 import { setup } from './commands/setup.js';
 import { statusCommand } from './commands/status.js';
 import { treeCommand } from './commands/tree.js';
@@ -216,6 +217,50 @@ ${chalk.yellow('Examples:')}
 `);
 }
 
+function showSearchHelp(): void {
+  console.log(`
+${chalk.bold('cn search - Search indexed content')}
+
+${chalk.yellow('Usage:')}
+  cn search <query> [options]
+  cn search index [options]
+  cn search status
+
+${chalk.yellow('Description:')}
+  Search local Confluence content using Meilisearch.
+  Requires Meilisearch to be running locally.
+
+${chalk.yellow('Subcommands:')}
+  cn search <query>         Search indexed content
+  cn search index           Build or update the search index
+  cn search status          Check Meilisearch connection and index status
+
+${chalk.yellow('Search Options:')}
+  --labels <label>          Filter by label (can be repeated)
+  --author <email>          Filter by author email
+  --limit <n>               Max results (default: 10)
+  --json                    Output as JSON
+  --xml                     Output as XML
+  --help                    Show this help message
+
+${chalk.yellow('Index Options:')}
+  --force                   Rebuild index from scratch
+  --dry-run                 Show what would be indexed
+
+${chalk.yellow('Prerequisites:')}
+  Requires Meilisearch running locally:
+    docker run -d -p 7700:7700 getmeili/meilisearch:latest
+
+${chalk.yellow('Examples:')}
+  cn search "authentication"              Basic search
+  cn search "api" --labels documentation  Filter by label
+  cn search "error" --limit 5             Limit results
+  cn search index                         Build search index
+  cn search index --force                 Rebuild index
+  cn search status                        Check connection
+`);
+}
+
 function showHelp(): void {
   console.log(`
 ${chalk.bold('cn - Confluence CLI')}
@@ -230,6 +275,7 @@ ${chalk.yellow('Commands:')}
   cn status                 Check connection and sync status
   cn tree                   Display page hierarchy
   cn open                   Open page in browser
+  cn search                 Search indexed content (requires Meilisearch)
 
 ${chalk.yellow('Global Options:')}
   --help, -h                Show help message
@@ -401,6 +447,62 @@ async function main(): Promise<void> {
         }
 
         await openCommand({ page, spaceKey });
+        break;
+      }
+
+      case 'search': {
+        if (args.includes('--help')) {
+          showSearchHelp();
+          process.exit(EXIT_CODES.SUCCESS);
+        }
+
+        // Check for subcommands: index, status
+        const firstArg = subArgs.find((arg) => !arg.startsWith('--'));
+
+        let subcommand: 'index' | 'status' | undefined;
+        let query: string | undefined;
+
+        if (firstArg === 'index') {
+          subcommand = 'index';
+        } else if (firstArg === 'status') {
+          subcommand = 'status';
+        } else if (firstArg) {
+          query = firstArg;
+        }
+
+        // Collect all --labels arguments
+        const labels: string[] = [];
+        for (let i = 0; i < subArgs.length; i++) {
+          if (subArgs[i] === '--labels' && i + 1 < subArgs.length) {
+            labels.push(subArgs[i + 1]);
+          }
+        }
+
+        // Get --author value
+        let author: string | undefined;
+        const authorIndex = subArgs.indexOf('--author');
+        if (authorIndex !== -1 && authorIndex + 1 < subArgs.length) {
+          author = subArgs[authorIndex + 1];
+        }
+
+        // Get --limit value
+        let limit: number | undefined;
+        const limitIndex = subArgs.indexOf('--limit');
+        if (limitIndex !== -1 && limitIndex + 1 < subArgs.length) {
+          limit = Number.parseInt(subArgs[limitIndex + 1], 10);
+        }
+
+        await searchCommand({
+          query,
+          subcommand,
+          labels: labels.length > 0 ? labels : undefined,
+          author,
+          limit,
+          force: subArgs.includes('--force'),
+          dryRun: subArgs.includes('--dry-run'),
+          json: subArgs.includes('--json'),
+          xml: subArgs.includes('--xml'),
+        });
         break;
       }
 
