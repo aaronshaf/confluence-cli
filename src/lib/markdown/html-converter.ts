@@ -238,6 +238,11 @@ export class HtmlConverter {
 
       // Text
       text(this: Renderer, token: Tokens.Text): string {
+        // If text has nested tokens (e.g., bold/italic/links inside list items),
+        // parse them instead of returning raw text
+        if ('tokens' in token && token.tokens && token.tokens.length > 0) {
+          return this.parser.parseInline(token.tokens);
+        }
         return token.text;
       },
     };

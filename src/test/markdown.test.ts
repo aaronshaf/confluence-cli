@@ -313,6 +313,19 @@ describe('HtmlConverter', () => {
     expect(html).toContain('Item 1');
   });
 
+  test('converts inline formatting inside list items', () => {
+    const converter = new HtmlConverter();
+    const markdown =
+      '- **[ger](https://github.com/aaronshaf/ger)** - Gerrit CLI for code review\n- **[jk](https://github.com/aaronshaf/jk)** - Jenkins CLI';
+    const { html } = converter.convert(markdown);
+
+    expect(html).toContain('<ul>');
+    expect(html).toContain('<strong><a href="https://github.com/aaronshaf/ger">ger</a></strong>');
+    expect(html).toContain('<strong><a href="https://github.com/aaronshaf/jk">jk</a></strong>');
+    expect(html).toContain('Gerrit CLI for code review');
+    expect(html).not.toContain('**[ger]'); // Should not contain raw markdown
+  });
+
   test('converts links', () => {
     const converter = new HtmlConverter();
     const { html } = converter.convert('[Example](https://example.com)');
