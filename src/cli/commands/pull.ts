@@ -7,23 +7,29 @@ import { readSpaceConfig, hasSpaceConfig } from '../../lib/space-config.js';
 import { SyncEngine, type SyncProgressReporter } from '../../lib/sync/index.js';
 
 /**
- * Create a progress reporter for sync operations
+ * Create a progress reporter for pull operations
  */
-function createProgressReporter(spinner: Ora): SyncProgressReporter {
+function createProgressReporter(): SyncProgressReporter {
+  let spinner: Ora | undefined;
+
   return {
     onFetchStart: () => {
-      spinner.text = 'Fetching pages from Confluence...';
+      spinner = ora({
+        text: 'Fetching pages from Confluence...',
+        hideCursor: false,
+        discardStdin: false,
+      }).start();
     },
     onFetchComplete: (pageCount, folderCount) => {
       const folderText = folderCount > 0 ? ` and ${folderCount} folders` : '';
-      spinner.text = `Found ${pageCount} pages${folderText}, comparing with local state...`;
+      spinner?.succeed(`Found ${pageCount} pages${folderText}`);
+      spinner = undefined;
     },
     onDiffComplete: (added, modified, deleted) => {
       const total = added + modified + deleted;
       if (total === 0) {
-        spinner.succeed('Already up to date');
+        console.log(chalk.green('  Already up to date'));
       } else {
-        spinner.stop();
         const parts = [];
         if (added > 0) parts.push(chalk.green(`${added} new`));
         if (modified > 0) parts.push(chalk.yellow(`${modified} modified`));
@@ -45,17 +51,41 @@ function createProgressReporter(spinner: Ora): SyncProgressReporter {
   };
 }
 
-export interface SyncCommandOptions {
-  init?: string;
+export interface PullCommandOptions {
   dryRun?: boolean;
   force?: boolean;
   depth?: number;
 }
 
+interface CleanupContext {
+  sigintHandler: () => void;
+  stdinHandler: (data: Buffer | string) => void;
+  restoreRawMode: boolean | undefined;
+}
+
 /**
- * Sync command - syncs a Confluence space to the local directory
+ * Clean up signal handlers and restore stdin state
  */
-export async function syncCommand(options: SyncCommandOptions): Promise<void> {
+function cleanupHandlers(ctx: CleanupContext): void {
+  process.off('SIGINT', ctx.sigintHandler);
+  process.off('SIGTERM', ctx.sigintHandler);
+  if (process.stdin.isTTY) {
+    process.stdin.off('data', ctx.stdinHandler);
+    process.stdin.pause();
+  }
+  if (ctx.restoreRawMode !== undefined && process.stdin.setRawMode) {
+    try {
+      process.stdin.setRawMode(ctx.restoreRawMode);
+    } catch {
+      // Ignore errors restoring raw mode
+    }
+  }
+}
+
+/**
+ * Pull command - pulls a Confluence space to the local directory
+ */
+export async function pullCommand(options: PullCommandOptions): Promise<void> {
   const configManager = new ConfigManager();
   const config = await configManager.getConfig();
 
@@ -68,59 +98,62 @@ export async function syncCommand(options: SyncCommandOptions): Promise<void> {
   const directory = process.cwd();
   const formatter = getFormatter(false);
 
-  // Initialize new space
-  if (options.init) {
-    const spinner = ora(`Initializing sync for space ${options.init}...`).start();
-
-    try {
-      const spaceConfig = await syncEngine.initSync(directory, options.init);
-      spinner.succeed(`Initialized sync for space "${spaceConfig.spaceName}" (${spaceConfig.spaceKey})`);
-
-      console.log('');
-      console.log(chalk.gray('Space configuration saved to .confluence.json'));
-      console.log(chalk.gray('Run "cn sync" to download pages.'));
-    } catch (error) {
-      spinner.fail('Failed to initialize sync');
-
-      if (error instanceof Error && error.message.includes('not found')) {
-        console.error(chalk.red(`\nSpace "${options.init}" not found.`));
-        console.log(chalk.gray('Check the space key and try again.'));
-        process.exit(EXIT_CODES.SPACE_NOT_FOUND);
-      }
-
-      console.error(chalk.red(error instanceof Error ? error.message : 'Unknown error'));
-      process.exit(EXIT_CODES.GENERAL_ERROR);
-    }
-
-    return;
-  }
-
   // Check if space is configured
   if (!hasSpaceConfig(directory)) {
     console.error(chalk.red('No space configured in this directory.'));
-    console.log(chalk.gray('Run "cn sync --init <SPACE_KEY>" to initialize.'));
+    console.log(chalk.gray('Run "cn clone <SPACE_KEY>" to clone a space.'));
     process.exit(EXIT_CODES.CONFIG_ERROR);
   }
 
   // Get space info for display
   const spaceConfig = readSpaceConfig(directory);
   if (spaceConfig) {
-    console.log(chalk.bold(`Syncing space: ${spaceConfig.spaceName} (${spaceConfig.spaceKey})`));
+    console.log(chalk.bold(`Pulling space: ${spaceConfig.spaceName} (${spaceConfig.spaceKey})`));
   }
 
-  // Perform sync
-  const spinner = ora(options.dryRun ? 'Checking for changes...' : 'Fetching pages...').start();
-  const progressReporter = options.dryRun ? undefined : createProgressReporter(spinner);
+  // Cancellation signal - shared between handler and sync engine
+  const signal = { cancelled: false };
 
-  // Handle Ctrl+C - exit immediately
+  // Force raw mode to capture Ctrl+C as data when Bun doesn't deliver SIGINT.
+  let restoreRawMode: boolean | undefined;
+  if (process.stdin.isTTY && process.stdin.setRawMode) {
+    try {
+      restoreRawMode = process.stdin.isRaw ?? false;
+      process.stdin.setRawMode(true);
+    } catch {
+      restoreRawMode = undefined;
+    }
+  }
+
+  // Handle Ctrl+C via SIGINT
   const sigintHandler = (): void => {
-    spinner.stop();
+    if (signal.cancelled) return;
+    signal.cancelled = true;
     console.log('');
-    console.log(chalk.yellow('Sync interrupted.'));
-    process.exit(130);
+    console.log(chalk.yellow('Cancelling pull...'));
   };
   process.on('SIGINT', sigintHandler);
   process.on('SIGTERM', sigintHandler);
+
+  // Fallback: Handle Ctrl+C as raw byte (0x03/ETX) when terminal is in raw mode
+  // This catches Ctrl+C even when SIGINT isn't generated
+  const stdinHandler = (data: Buffer | string): void => {
+    const isCtrlC = typeof data === 'string' ? data.includes('\u0003') : data.includes(0x03);
+    if (isCtrlC) {
+      // ETX byte = Ctrl+C
+      if (signal.cancelled) return;
+      signal.cancelled = true;
+      console.log('');
+      console.log(chalk.yellow('Cancelling pull...'));
+    }
+  };
+  if (process.stdin.isTTY) {
+    process.stdin.on('data', stdinHandler);
+    process.stdin.resume();
+  }
+
+  // Perform sync
+  const progressReporter = options.dryRun ? undefined : createProgressReporter();
 
   try {
     const result = await syncEngine.sync(directory, {
@@ -128,15 +161,14 @@ export async function syncCommand(options: SyncCommandOptions): Promise<void> {
       force: options.force,
       depth: options.depth,
       progress: progressReporter,
+      signal,
     });
 
-    // Clean up signal handlers
-    process.off('SIGINT', sigintHandler);
-    process.off('SIGTERM', sigintHandler);
+    // Clean up handlers
+    cleanupHandlers({ sigintHandler, stdinHandler, restoreRawMode });
 
-    // For dry run, stop spinner and show diff
+    // For dry run, show diff
     if (options.dryRun) {
-      spinner.stop();
       console.log('');
       console.log(formatter.formatSyncDiff(result.changes));
     }
@@ -159,6 +191,13 @@ export async function syncCommand(options: SyncCommandOptions): Promise<void> {
       }
     }
 
+    // Handle cancellation
+    if (result.cancelled) {
+      console.log('');
+      console.log(chalk.yellow('Pull cancelled. Run "cn pull" again to resume.'));
+      process.exit(130);
+    }
+
     // If dry run, offer to sync
     if (options.dryRun) {
       const totalChanges = result.changes.added.length + result.changes.modified.length + result.changes.deleted.length;
@@ -169,7 +208,7 @@ export async function syncCommand(options: SyncCommandOptions): Promise<void> {
       }
     } else if (!result.success) {
       console.log('');
-      console.error(chalk.red('Sync completed with errors.'));
+      console.error(chalk.red('Pull completed with errors.'));
       process.exit(EXIT_CODES.GENERAL_ERROR);
     } else {
       const { added, modified, deleted } = result.changes;
@@ -180,12 +219,13 @@ export async function syncCommand(options: SyncCommandOptions): Promise<void> {
         if (added.length > 0) parts.push(`${added.length} added`);
         if (modified.length > 0) parts.push(`${modified.length} modified`);
         if (deleted.length > 0) parts.push(`${deleted.length} deleted`);
-        console.log(chalk.green(`✓ Sync complete: ${parts.join(', ')}`));
+        console.log(chalk.green(`✓ Pull complete: ${parts.join(', ')}`));
       }
     }
   } catch (error) {
-    process.off('SIGINT', sigintHandler);
-    spinner.fail('Sync failed');
+    // Clean up handlers
+    cleanupHandlers({ sigintHandler, stdinHandler, restoreRawMode });
+    console.error(chalk.red('Pull failed'));
     console.error(chalk.red(error instanceof Error ? error.message : 'Unknown error'));
     process.exit(EXIT_CODES.GENERAL_ERROR);
   }

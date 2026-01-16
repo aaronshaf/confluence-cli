@@ -202,7 +202,7 @@ export class SyncEngine {
    * Per ADR-0005: Directory structure mirrors page tree
    * Per ADR-0018: Handles folders as parents in the hierarchy
    *
-   * Space homepage (root page) becomes index.md at root, its children are at root level
+   * Space homepage (root page) becomes README.md at root, its children are at root level
    */
   private generateLocalPath(
     page: Page,
@@ -211,9 +211,9 @@ export class SyncEngine {
     existingPaths: Set<string>,
     homepageId?: string,
   ): string {
-    // Space homepage becomes index.md at root
+    // Space homepage becomes README.md at root
     if (page.id === homepageId) {
-      const basePath = 'index.md';
+      const basePath = 'README.md';
       existingPaths.add(basePath);
       return basePath;
     }
@@ -239,8 +239,8 @@ export class SyncEngine {
 
     let basePath: string;
     if (hasChildren) {
-      // Pages with children use folder with index.md
-      basePath = [...parentChain, slug, 'index.md'].join('/');
+      // Pages with children use folder with README.md
+      basePath = [...parentChain, slug, 'README.md'].join('/');
     } else {
       // Leaf pages are single .md files
       basePath = [...parentChain, `${slug}.md`].join('/');
@@ -249,8 +249,8 @@ export class SyncEngine {
     // Handle conflicts by appending counter
     if (existingPaths.has(basePath)) {
       let counter = 2;
-      const ext = hasChildren ? '/index.md' : '.md';
-      const baseWithoutExt = hasChildren ? basePath.replace('/index.md', '') : basePath.replace('.md', '');
+      const ext = hasChildren ? '/README.md' : '.md';
+      const baseWithoutExt = hasChildren ? basePath.replace('/README.md', '') : basePath.replace('.md', '');
 
       while (existingPaths.has(`${baseWithoutExt}-${counter}${ext}`)) {
         counter++;
@@ -298,9 +298,18 @@ export class SyncEngine {
       }
 
       // Find the space homepage (root page with no parent)
-      // Homepage content goes to index.md, its children are at root level
+      // Homepage content goes to README.md, its children are at root level
       const homepage = remotePages.find((p) => !p.parentId);
       const homepageId = homepage?.id;
+
+      // For force sync, save old tracked pages for cleanup after successful download
+      // This ensures we don't delete files until new content is confirmed
+      const previouslyTrackedPages = options.force ? { ...config.pages } : {};
+      if (options.force && !options.dryRun) {
+        // Clear tracked pages so everything is treated as "added"
+        config = { ...config, pages: {} };
+        writeSpaceConfig(directory, config);
+      }
 
       // Compute diff
       const diff = options.force
@@ -331,7 +340,10 @@ export class SyncEngine {
 
       // Process added pages
       for (const change of diff.added) {
-        // Check for cancellation
+        // Yield to event loop to allow signal handlers to run (Bun native)
+        await Bun.sleep(0);
+
+        // Check for cancellation signal
         if (signal?.cancelled) {
           result.cancelled = true;
           break;
@@ -393,7 +405,10 @@ export class SyncEngine {
 
       // Process modified pages
       for (const change of diff.modified) {
-        // Check for cancellation
+        // Yield to event loop to allow signal handlers to run (Bun native)
+        await Bun.sleep(0);
+
+        // Check for cancellation signal
         if (signal?.cancelled) {
           result.cancelled = true;
           break;
@@ -475,7 +490,10 @@ export class SyncEngine {
 
       // Process deleted pages
       for (const change of diff.deleted) {
-        // Check for cancellation
+        // Yield to event loop to allow signal handlers to run (Bun native)
+        await Bun.sleep(0);
+
+        // Check for cancellation signal
         if (signal?.cancelled) {
           result.cancelled = true;
           break;
@@ -514,6 +532,38 @@ export class SyncEngine {
           result.errors.push(errorMsg);
           result.success = false;
           progress?.onPageError?.(change.title, String(error));
+        }
+      }
+
+      // For force sync: clean up old files that weren't re-downloaded
+      // This happens after all pages are successfully processed
+      if (options.force && !result.cancelled && Object.keys(previouslyTrackedPages).length > 0) {
+        const newTrackedPaths = new Set(Object.values(config.pages).map((p) => p.localPath));
+        for (const [pageId, pageInfo] of Object.entries(previouslyTrackedPages)) {
+          // Skip if this path was re-used by a new page
+          if (newTrackedPaths.has(pageInfo.localPath)) continue;
+          // Skip if page was re-downloaded (exists in new config)
+          if (config.pages[pageId]) continue;
+
+          try {
+            assertPathWithinDirectory(directory, pageInfo.localPath);
+            const fullPath = join(directory, pageInfo.localPath);
+            if (existsSync(fullPath)) {
+              unlinkSync(fullPath);
+              // Clean up empty parent directories
+              let parentDir = dirname(fullPath);
+              while (parentDir !== directory) {
+                if (existsSync(parentDir) && readdirSync(parentDir).length === 0) {
+                  rmSync(parentDir, { recursive: true });
+                  parentDir = dirname(parentDir);
+                } else {
+                  break;
+                }
+              }
+            }
+          } catch (err) {
+            result.warnings.push(`Failed to clean up old file ${pageInfo.localPath}: ${err}`);
+          }
         }
       }
 

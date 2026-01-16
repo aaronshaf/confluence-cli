@@ -50,46 +50,85 @@ $ cn setup
 
 ---
 
-## cn sync
+## cn clone
 
-Sync a Confluence space to the current directory.
+Clone a Confluence space to a new local directory.
 
 ### Usage
 
 ```
-cn sync [options]
-cn sync --init <SPACE_KEY>
+cn clone <SPACE_KEY> [directory]
+```
+
+### Arguments
+
+- `SPACE_KEY` - The Confluence space key (required)
+- `directory` - Target directory name (defaults to space key)
+
+### Behavior
+
+1. Verify space exists via API
+2. Create target directory
+3. Create `.confluence.json` with space metadata
+4. Print instructions to run `cn pull`
+
+### Example
+
+```
+$ cn clone ENG
+✓ Cloned space "Engineering" (ENG) into ENG
+
+  cd ENG
+  cn pull
+
+$ cn clone ENG my-engineering
+✓ Cloned space "Engineering" (ENG) into my-engineering
+
+  cd my-engineering
+  cn pull
+```
+
+### Errors
+
+- Space not found
+- Directory already exists
+- Permission denied
+
+---
+
+## cn pull
+
+Pull pages from Confluence to the current directory.
+
+### Usage
+
+```
+cn pull [options]
 ```
 
 ### Options
 
 ```
---init <key>     Initialize sync for a space (creates .confluence.json)
---dry-run        Show what would be synced without making changes
---force          Full re-sync (re-download all pages)
---depth <n>      Limit sync depth (default: unlimited)
+--dry-run        Show what would be pulled without making changes
+--force          Full re-pull (re-download all pages)
+--depth <n>      Limit pull depth (default: unlimited)
 ```
 
-### Sync Modes
+### Pull Modes
 
-**Smart Sync (default):**
-- Only syncs pages where remote version > local version
+**Smart Pull (default):**
+- Only pulls pages where remote version > local version
 - Handles title/parent changes by moving local files
 - Most efficient for regular use
 
-**Full Sync (`--force`):**
+**Full Pull (`--force`):**
 - Re-downloads all pages regardless of local state
+- Deletes all existing tracked files first
 - Use when local state may be corrupted
-- Treats all pages as "added"
 
 ### Behavior
 
-**With `--init`:**
-1. Verify space exists
-2. Create `.confluence.json` with space metadata
-3. Print instructions to run `cn sync`
-
-**Smart Sync (default):**
+**Smart Pull (default):**
 1. Read `.confluence.json` from current directory
 2. Compare remote versions with local sync state
 3. Download new/modified pages
@@ -97,55 +136,35 @@ cn sync --init <SPACE_KEY>
 5. Remove deleted pages
 6. Update sync state
 
-**Full Sync (`--full`):**
+**Full Pull (`--force`):**
 1. Read `.confluence.json` from current directory
-2. Treat all remote pages as "added"
+2. Delete all tracked files
 3. Re-download all pages
 4. Update sync state
 
 ### Output
 
 ```
-$ cn sync
-Syncing space: Engineering (ENG)
-  ↓ Getting Started/Installation.md (modified)
-  ↓ API Reference/Endpoints.md (new)
-  × Old Page.md (deleted)
-✓ Synced 2 pages, deleted 1
-```
-
-### Progress Output
-
-Sync command shows detailed progress during execution:
-
-- **Fetching phase**: "Fetching pages from Confluence..." with spinner
-- **Diff phase**: "Comparing with local state..." or show counts (e.g., "Found 5 changes")
-- **Per-page progress**: Show each page as it's downloaded/written
-- **Rate limiting**: Indicate when rate limited and retry countdown
-- **Summary**: Final counts of added/modified/deleted
-
-Example improved output:
-```
-$ cn sync
-Syncing space: Engineering (ENG)
+$ cn pull
+Pulling space: Engineering (ENG)
 ⠋ Fetching pages from Confluence...
-  Found 42 pages, comparing with local state...
+  Found 42 pages and 3 folders
   3 new, 2 modified, 1 deleted
 
-  [1/6] ↓ getting-started/installation.md (new)
-  [2/6] ↓ getting-started/quick-start.md (new)
-  [3/6] ↓ api-reference/endpoints.md (modified)
-  [4/6] ↓ api-reference/auth.md (modified)
-  [5/6] ↓ getting-started/config.md (new)
-  [6/6] × deprecated/old-page.md (deleted)
+  ✓ getting-started/installation.md
+  ✓ getting-started/quick-start.md
+  ✓ api-reference/endpoints.md
+  ✓ api-reference/auth.md
+  ✓ getting-started/config.md
+  ✓ deprecated/old-page.md (deleted)
 
-✓ Synced 5 pages, deleted 1
+✓ Pull complete: 5 added, 1 deleted
 ```
 
 ### File Naming
 
 1. Slugify page title: "Getting Started" → "getting-started"
-2. Use `index.md` for pages with children
+2. Use `README.md` for pages with children
 3. Append counter for conflicts: `page.md`, `page-2.md`
 
 ### Example Directory Structure
@@ -153,12 +172,12 @@ Syncing space: Engineering (ENG)
 ```
 ./
 ├── .confluence.json
-├── Home.md
+├── README.md                    # Space homepage
 ├── getting-started/
-│   ├── index.md
+│   ├── README.md                # "Getting Started" page (has children)
 │   └── installation.md
 └── api-reference/
-    ├── index.md
+    ├── README.md
     └── endpoints.md
 ```
 
@@ -186,7 +205,7 @@ $ cn status
 ```
 $ cn status
 ✓ Connected to https://company.atlassian.net
-✗ No .confluence.json found. Run 'cn sync --init <SPACE_KEY>' to initialize.
+✗ No .confluence.json found. Run 'cn clone <SPACE_KEY>' to clone a space.
 ```
 
 ### Output (In Sync Folder)

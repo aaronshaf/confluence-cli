@@ -61,7 +61,8 @@ Records of significant architectural decisions with context and rationale:
 
 ```bash
 cn setup     # Configure Confluence credentials
-cn sync      # Sync space to local folder
+cn clone     # Clone a space to a new folder
+cn pull      # Pull changes from Confluence
 cn status    # Check connection and sync status
 cn tree      # Display page hierarchy
 cn open      # Open page in browser

@@ -4,10 +4,11 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EXIT_CODES } from '../lib/errors.js';
+import { cloneCommand } from './commands/clone.js';
 import { openCommand } from './commands/open.js';
 import { setup } from './commands/setup.js';
 import { statusCommand } from './commands/status.js';
-import { syncCommand } from './commands/sync.js';
+import { pullCommand } from './commands/pull.js';
 import { treeCommand } from './commands/tree.js';
 
 // Get version from package.json
@@ -40,40 +41,62 @@ ${chalk.yellow('Examples:')}
 `);
 }
 
-function showSyncHelp(): void {
+function showCloneHelp(): void {
   console.log(`
-${chalk.bold('cn sync - Sync Confluence space to local folder')}
+${chalk.bold('cn clone - Clone a Confluence space to a new folder')}
 
 ${chalk.yellow('Usage:')}
-  cn sync [options]
-  cn sync --init <SPACE_KEY>
+  cn clone <SPACE_KEY> [directory]
 
 ${chalk.yellow('Description:')}
-  Syncs a Confluence space to the current directory.
-  Use --init to initialize sync for a new space.
+  Creates a new directory and initializes it for a Confluence space.
+  Similar to "git clone" - sets up everything needed to pull pages.
 
-${chalk.yellow('Sync Modes:')}
-  ${chalk.cyan('Smart sync (default)')}
-    Only syncs pages that have changed since last sync.
+${chalk.yellow('Arguments:')}
+  SPACE_KEY                 The Confluence space key (required)
+  directory                 Target directory name (defaults to space key)
+
+${chalk.yellow('Options:')}
+  --help                    Show this help message
+
+${chalk.yellow('Examples:')}
+  cn clone DOCS             Clone into ./DOCS
+  cn clone DOCS my-docs     Clone into ./my-docs
+  cn clone ENG engineering  Clone ENG space into ./engineering
+`);
+}
+
+function showPullHelp(): void {
+  console.log(`
+${chalk.bold('cn pull - Pull Confluence space to local folder')}
+
+${chalk.yellow('Usage:')}
+  cn pull [options]
+
+${chalk.yellow('Description:')}
+  Pulls pages from Confluence to the current directory.
+  Must be run in a directory initialized with "cn clone".
+
+${chalk.yellow('Modes:')}
+  ${chalk.cyan('Smart pull (default)')}
+    Only pulls pages that have changed since last pull.
     Compares version numbers to detect modifications.
     Handles renames and moves automatically.
 
-  ${chalk.cyan('Full sync (--force)')}
+  ${chalk.cyan('Full pull (--force)')}
     Re-downloads all pages regardless of local state.
     Use when local state may be corrupted or out of sync.
 
 ${chalk.yellow('Options:')}
-  --init <SPACE_KEY>        Initialize sync for a space
-  --dry-run                 Show what would be synced without making changes
-  --force                   Full re-sync, ignore local state
-  --depth <n>               Limit sync depth
+  --dry-run                 Show what would be pulled without making changes
+  --force                   Full re-pull, ignore local state
+  --depth <n>               Limit depth
   --help                    Show this help message
 
 ${chalk.yellow('Examples:')}
-  cn sync --init DOCS       Initialize sync for DOCS space
-  cn sync                   Smart sync (only changes)
-  cn sync --dry-run         Preview changes
-  cn sync --force           Full re-sync all pages
+  cn pull                   Smart pull (only changes)
+  cn pull --dry-run         Preview changes
+  cn pull --force           Full re-pull all pages
 `);
 }
 
@@ -158,7 +181,8 @@ Sync Confluence spaces to local markdown files.
 
 ${chalk.yellow('Commands:')}
   cn setup                  Configure Confluence credentials
-  cn sync                   Sync space to local folder
+  cn clone                  Clone a space to a new folder
+  cn pull                   Pull space to local folder
   cn status                 Check connection and sync status
   cn tree                   Display page hierarchy
   cn open                   Open page in browser
@@ -176,8 +200,8 @@ ${chalk.yellow('Environment Variables:')}
 
 ${chalk.yellow('Examples:')}
   cn setup                  Configure credentials
-  cn sync --init DOCS       Initialize sync for DOCS space
-  cn sync                   Sync changes
+  cn clone DOCS             Clone DOCS space to ./DOCS
+  cn pull                   Pull changes
   cn tree                   Show page hierarchy
   cn open "My Page"         Open page in browser
 
@@ -219,15 +243,33 @@ async function main(): Promise<void> {
         await setup();
         break;
 
-      case 'sync': {
+      case 'clone': {
         if (args.includes('--help')) {
-          showSyncHelp();
+          showCloneHelp();
           process.exit(EXIT_CODES.SUCCESS);
         }
 
-        // Parse sync options
-        const initIndex = args.indexOf('--init');
-        const spaceKey = initIndex !== -1 && initIndex + 1 < args.length ? args[initIndex + 1] : undefined;
+        // Get space key (first non-flag argument after 'clone')
+        const spaceKey = subArgs.find((arg) => !arg.startsWith('--'));
+        if (!spaceKey) {
+          console.error(chalk.red('Space key is required.'));
+          console.log(chalk.gray('Usage: cn clone <SPACE_KEY> [directory]'));
+          process.exit(EXIT_CODES.INVALID_ARGUMENTS);
+        }
+
+        // Get optional directory (second non-flag argument)
+        const nonFlagArgs = subArgs.filter((arg) => !arg.startsWith('--'));
+        const directory = nonFlagArgs[1];
+
+        await cloneCommand({ spaceKey, directory });
+        break;
+      }
+
+      case 'pull': {
+        if (args.includes('--help')) {
+          showPullHelp();
+          process.exit(EXIT_CODES.SUCCESS);
+        }
 
         const dryRun = args.includes('--dry-run');
         const force = args.includes('--force');
@@ -238,12 +280,7 @@ async function main(): Promise<void> {
           depth = Number.parseInt(args[depthIndex + 1], 10);
         }
 
-        await syncCommand({
-          init: spaceKey,
-          dryRun,
-          force,
-          depth,
-        });
+        await pullCommand({ dryRun, force, depth });
         break;
       }
 

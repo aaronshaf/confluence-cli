@@ -263,8 +263,29 @@ export class MarkdownConverter {
       .replace(/<ac:plain-text-body>/gi, '<pre>')
       .replace(/<\/ac:plain-text-body>/gi, '</pre>');
 
-    // Convert using Turndown
-    let markdown = this.turndown.turndown(processedHtml);
+    // Convert using Turndown, with error handling for malformed HTML
+    let markdown: string;
+    try {
+      markdown = this.turndown.turndown(processedHtml);
+    } catch {
+      // If turndown fails (often due to malformed tables), try stripping tables and retry
+      try {
+        const tableCount = (processedHtml.match(/<table[\s\S]*?<\/table>/gi) || []).length;
+        const htmlWithoutTables = processedHtml.replace(
+          /<table[\s\S]*?<\/table>/gi,
+          '\n\n[Table removed due to conversion error]\n\n',
+        );
+        markdown = this.turndown.turndown(htmlWithoutTables);
+        this.warnings.push(`Removed ${tableCount} malformed table(s) during conversion`);
+      } catch {
+        // Last resort: return raw text content
+        this.warnings.push('Converted as plain text (HTML too malformed)');
+        markdown = processedHtml
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+    }
 
     // Post-process: clean up extra whitespace
     markdown = markdown
