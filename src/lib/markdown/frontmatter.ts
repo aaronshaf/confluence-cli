@@ -1,5 +1,5 @@
 import matter from 'gray-matter';
-import type { Label, Page } from '../confluence-client/types.js';
+import type { Label, Page, User } from '../confluence-client/types.js';
 
 /**
  * Comprehensive frontmatter metadata for synced pages
@@ -16,8 +16,10 @@ export interface PageFrontmatter {
   parent_title?: string;
   author_id?: string;
   author_name?: string;
+  author_email?: string;
   last_modifier_id?: string;
   last_modifier_name?: string;
+  last_modifier_email?: string;
   labels?: string[];
   url?: string;
   synced_at: string;
@@ -32,6 +34,8 @@ export function createFrontmatter(
   labels: Label[] = [],
   parentTitle?: string,
   baseUrl?: string,
+  author?: User,
+  lastModifier?: User,
 ): PageFrontmatter {
   const webui = page._links?.webui;
   const url = webui && baseUrl ? `${baseUrl}/wiki${webui}` : undefined;
@@ -46,7 +50,11 @@ export function createFrontmatter(
     parent_id: page.parentId,
     parent_title: parentTitle,
     author_id: page.authorId,
+    author_name: author?.displayName,
+    author_email: author?.email,
     last_modifier_id: page.version?.authorId,
+    last_modifier_name: lastModifier?.displayName,
+    last_modifier_email: lastModifier?.email,
     labels: labels.length > 0 ? labels.map((l) => l.name) : undefined,
     url,
     synced_at: new Date().toISOString(),

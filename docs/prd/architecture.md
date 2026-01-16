@@ -86,7 +86,9 @@ class ConfluenceClient extends ConfluenceClientBase {
 - `GET /wiki/api/v2/pages` - List pages (with pagination)
 - `GET /wiki/api/v2/pages/{id}` - Get page content
 - `GET /wiki/api/v2/pages/{id}/children` - Get child pages
+- `GET /wiki/api/v2/pages/{id}/labels` - Get page labels
 - `GET /wiki/api/v2/folders/{id}` - Get folder details (discovered via page parentIds)
+- `GET /wiki/api/v2/users/{accountId}` - Get user details (for author names and emails)
 - `POST /wiki/api/v2/pages` - Create new page
 - `PUT /wiki/api/v2/pages/{id}` - Update existing page
 
@@ -118,7 +120,9 @@ class SyncEngine {
 4. Compute diff (added, modified, deleted pages)
 5. For each changed page:
    - Fetch full content
-   - Convert HTML → Markdown
+   - Fetch labels
+   - Fetch author and last modifier user details (name and email)
+   - Convert HTML → Markdown with frontmatter
    - Resolve path including folder hierarchy
    - Write to filesystem
 6. Update sync state

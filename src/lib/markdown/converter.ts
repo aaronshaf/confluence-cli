@@ -1,6 +1,6 @@
 import TurndownService from 'turndown';
 import * as turndownPluginGfm from 'turndown-plugin-gfm';
-import type { Label, Page } from '../confluence-client/types.js';
+import type { Label, Page, User } from '../confluence-client/types.js';
 import { createFrontmatter, serializeMarkdown, type PageFrontmatter } from './frontmatter.js';
 
 /**
@@ -307,6 +307,8 @@ export class MarkdownConverter {
     labels: Label[] = [],
     parentTitle?: string,
     baseUrl?: string,
+    author?: User,
+    lastModifier?: User,
   ): { markdown: string; warnings: string[] } {
     // Set context for image URL generation
     this.currentBaseUrl = baseUrl || '';
@@ -314,7 +316,7 @@ export class MarkdownConverter {
 
     const html = page.body?.storage?.value || '';
     const content = this.convert(html);
-    const frontmatter = createFrontmatter(page, spaceKey, labels, parentTitle, baseUrl);
+    const frontmatter = createFrontmatter(page, spaceKey, labels, parentTitle, baseUrl, author, lastModifier);
     const markdown = serializeMarkdown(frontmatter, content);
 
     return {

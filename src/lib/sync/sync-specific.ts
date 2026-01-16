@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import type { ConfluenceClient } from '../confluence-client/index.js';
+import type { ConfluenceClient, User } from '../confluence-client/index.js';
 import { SyncError } from '../errors.js';
 import type { MarkdownConverter } from '../markdown/index.js';
 import {
@@ -12,6 +12,27 @@ import {
   type SpaceConfigWithState,
 } from '../space-config.js';
 import type { SyncOptions, SyncResult } from './sync-engine.js';
+
+/**
+ * Create a cached user fetcher to avoid redundant API calls
+ */
+function createUserFetcher(client: ConfluenceClient): (accountId: string | undefined) => Promise<User | undefined> {
+  const cache = new Map<string, User | undefined>();
+  return async (accountId: string | undefined): Promise<User | undefined> => {
+    if (!accountId) return undefined;
+    if (cache.has(accountId)) {
+      return cache.get(accountId);
+    }
+    try {
+      const user = await client.getUser(accountId);
+      cache.set(accountId, user);
+      return user;
+    } catch {
+      cache.set(accountId, undefined);
+      return undefined;
+    }
+  };
+}
 
 /**
  * Validate that a path stays within a base directory (prevents path traversal)
@@ -106,6 +127,9 @@ export async function syncSpecificPages(
       return result;
     }
 
+    // Create cached user fetcher
+    const fetchUser = createUserFetcher(client);
+
     // Process each page
     let currentChange = 0;
     const totalChanges = result.changes.modified.length;
@@ -123,7 +147,19 @@ export async function syncSpecificPages(
           parentTitle = config.pages[fullPage.parentId].localPath.split('/').pop()?.replace('.md', '');
         }
 
-        const { markdown, warnings } = converter.convertPage(fullPage, config.spaceKey, labels, parentTitle, baseUrl);
+        // Get author and last modifier user information (cached)
+        const author = await fetchUser(fullPage.authorId);
+        const lastModifier = await fetchUser(fullPage.version?.authorId);
+
+        const { markdown, warnings } = converter.convertPage(
+          fullPage,
+          config.spaceKey,
+          labels,
+          parentTitle,
+          baseUrl,
+          author,
+          lastModifier,
+        );
         result.warnings.push(...warnings.map((w) => `${fullPage.title}: ${w}`));
 
         const localPath = change.localPath ?? '';

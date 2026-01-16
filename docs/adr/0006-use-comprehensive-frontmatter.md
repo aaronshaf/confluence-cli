@@ -22,7 +22,7 @@ Use comprehensive frontmatter with all available metadata.
 - **Tooling**: Rich metadata enables better tooling integration
 - **Traceability**: Full audit trail of page history
 - **Labels**: Enable filtering/searching by Confluence labels locally
-- **Authors**: Know who created/modified content
+- **Authors**: Know who created/modified content (includes names and emails fetched from Confluence API)
 - **URL**: Quick access back to Confluence page
 
 ## Consequences
@@ -52,8 +52,10 @@ parent_id: "root001"
 parent_title: "Home"
 author_id: "user123"
 author_name: "John Doe"
+author_email: "john.doe@example.com"
 last_modifier_id: "user456"
 last_modifier_name: "Jane Smith"
+last_modifier_email: "jane.smith@example.com"
 labels:
   - documentation
   - onboarding

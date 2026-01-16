@@ -7,6 +7,7 @@ import {
   type Folder,
   type Page,
   type PageTreeNode,
+  type User,
 } from '../confluence-client/index.js';
 import type { Config } from '../config.js';
 import { SyncError } from '../errors.js';
@@ -87,6 +88,7 @@ export class SyncEngine {
   private client: ConfluenceClient;
   private converter: MarkdownConverter;
   private baseUrl: string;
+  private userCache = new Map<string, User | undefined>();
 
   constructor(config: Config) {
     this.client = new ConfluenceClient(config);
@@ -200,6 +202,26 @@ export class SyncEngine {
     }
 
     return diff;
+  }
+
+  /**
+   * Safely fetch user information by account ID with caching
+   * Returns undefined if user cannot be fetched (e.g., user deleted, permissions, etc.)
+   */
+  private async fetchUser(accountId: string | undefined): Promise<User | undefined> {
+    if (!accountId) return undefined;
+    if (this.userCache.has(accountId)) {
+      return this.userCache.get(accountId);
+    }
+    try {
+      const user = await this.client.getUser(accountId);
+      this.userCache.set(accountId, user);
+      return user;
+    } catch {
+      // Silently fail if user cannot be fetched, but cache the failure
+      this.userCache.set(accountId, undefined);
+      return undefined;
+    }
   }
 
   /**
@@ -408,6 +430,10 @@ export class SyncEngine {
           // Get parent title (can be page or folder)
           const parentTitle = page.parentId ? contentMap.get(page.parentId)?.title : undefined;
 
+          // Get author and last modifier user information
+          const author = await this.fetchUser(fullPage.authorId);
+          const lastModifier = await this.fetchUser(fullPage.version?.authorId);
+
           // Convert to markdown
           const { markdown, warnings } = this.converter.convertPage(
             fullPage,
@@ -415,6 +441,8 @@ export class SyncEngine {
             labels,
             parentTitle,
             this.baseUrl,
+            author,
+            lastModifier,
           );
           result.warnings.push(...warnings.map((w) => `${page.title}: ${w}`));
 
@@ -473,6 +501,10 @@ export class SyncEngine {
           // Get parent title (can be page or folder)
           const parentTitle = page.parentId ? contentMap.get(page.parentId)?.title : undefined;
 
+          // Get author and last modifier user information
+          const author = await this.fetchUser(fullPage.authorId);
+          const lastModifier = await this.fetchUser(fullPage.version?.authorId);
+
           // Convert to markdown
           const { markdown, warnings } = this.converter.convertPage(
             fullPage,
@@ -480,6 +512,8 @@ export class SyncEngine {
             labels,
             parentTitle,
             this.baseUrl,
+            author,
+            lastModifier,
           );
           result.warnings.push(...warnings.map((w) => `${page.title}: ${w}`));
 

@@ -5,6 +5,7 @@ import {
   SpacesResponseSchema,
   PagesResponseSchema,
   PageSchema,
+  UserSchema,
 } from '../../lib/confluence-client/types.js';
 import { createValidFolder, createValidPage, createValidSpace, validateAndReturn } from '../msw-schema-validation.js';
 
@@ -88,6 +89,20 @@ export const handlers = [
       parentType: 'page',
     });
     return HttpResponse.json(validateAndReturn(FolderSchema, folder, 'Single Folder'));
+  }),
+
+  // Confluence user mock (v1 API - v2 doesn't have user endpoint)
+  http.get('*/wiki/rest/api/user', ({ request }) => {
+    const url = new URL(request.url);
+    const accountId = url.searchParams.get('accountId') || 'unknown';
+    // Generate unique user data based on accountId for realistic test coverage
+    const shortId = accountId.slice(0, 8);
+    const user = {
+      accountId,
+      displayName: `User ${shortId}`,
+      email: `user-${shortId}@example.com`,
+    };
+    return HttpResponse.json(validateAndReturn(UserSchema, user, 'User'));
   }),
 
   // CATCH-ALL: Return 404 for any unhandled requests

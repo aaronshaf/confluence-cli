@@ -242,7 +242,7 @@ cn push [file] [options]
 2. Detect missing `page_id` in frontmatter
 3. Convert markdown to Confluence Storage Format HTML
 4. Create page via API (uses `spaceId` from `.confluence.json`)
-5. Populate frontmatter with all metadata (`page_id`, `created_at`, `author_id`, etc.)
+5. Populate frontmatter with all metadata (`page_id`, `created_at`, `author_id`, `author_name`, `author_email`, etc.)
 6. Rename file to match title slug
 7. Update `.confluence.json` sync state
 

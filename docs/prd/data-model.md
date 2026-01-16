@@ -103,8 +103,10 @@ interface PageFrontmatter {
   // Author info
   author_id: string
   author_name: string
+  author_email: string
   last_modifier_id: string
   last_modifier_name: string
+  last_modifier_email: string
 
   // Additional metadata
   labels: string[]
@@ -129,8 +131,10 @@ parent_id: "page-root-001"
 parent_title: "Home"
 author_id: "user-123"
 author_name: "John Doe"
+author_email: "john.doe@example.com"
 last_modifier_id: "user-456"
 last_modifier_name: "Jane Smith"
+last_modifier_email: "jane.smith@example.com"
 labels:
   - documentation
   - onboarding
