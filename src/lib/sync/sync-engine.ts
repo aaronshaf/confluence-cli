@@ -1,6 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { RESERVED_FILENAMES } from '../file-scanner.js';
+import { dirname, join } from 'node:path';
 import {
   ConfluenceClient,
   isFolder,
@@ -16,17 +15,18 @@ import { buildPageLookupMap, MarkdownConverter, slugify, updateReferencesAfterRe
 import {
   createSpaceConfig,
   readSpaceConfig,
+  updateFolderSyncInfo,
   updateLastSync,
   updatePageSyncInfo,
   writeSpaceConfig,
+  type FolderSyncInfo,
   type PageSyncInfo,
   type SpaceConfigWithState,
 } from '../space-config.js';
+import { assertPathWithinDirectory, generateFolderPath, wouldGenerateReservedFilename } from './folder-path.js';
 import { syncSpecificPages } from './sync-specific.js';
 
-/**
- * Sync diff types
- */
+/** Sync diff types */
 export interface SyncChange {
   type: 'added' | 'modified' | 'deleted';
   pageId: string;
@@ -68,21 +68,6 @@ export interface SyncResult {
   errors: string[];
   cancelled?: boolean;
 }
-
-/**
- * Validate that a path stays within a base directory (prevents path traversal)
- * @throws SyncError if path escapes the base directory
- */
-function assertPathWithinDirectory(baseDir: string, targetPath: string): void {
-  const resolvedBase = resolve(baseDir);
-  const resolvedTarget = resolve(baseDir, targetPath);
-  if (!resolvedTarget.startsWith(`${resolvedBase}/`) && resolvedTarget !== resolvedBase) {
-    throw new SyncError(`Path traversal detected: "${targetPath}" escapes base directory`);
-  }
-}
-
-/** Check if page title would generate a reserved filename (CLAUDE.md, AGENTS.md) */
-const wouldGenerateReservedFilename = (title: string): boolean => RESERVED_FILENAMES.has(`${slugify(title)}.md`);
 
 /**
  * SyncEngine handles syncing Confluence spaces to local directories
@@ -331,6 +316,23 @@ export class SyncEngine {
       }
       for (const folder of folders) {
         contentMap.set(folder.id, folder);
+      }
+
+      // Track discovered folders in config (ADR-0023)
+      // This enables push to reuse folder IDs for the same paths
+      for (const folder of folders) {
+        const folderPath = generateFolderPath(folder, contentMap);
+        const folderInfo: FolderSyncInfo = {
+          folderId: folder.id,
+          title: folder.title,
+          parentId: folder.parentId ?? undefined,
+          localPath: folderPath,
+        };
+        config = updateFolderSyncInfo(config, folderInfo);
+      }
+      // Save folder tracking immediately
+      if (folders.length > 0 && !options.dryRun) {
+        writeSpaceConfig(directory, config);
       }
 
       // Find the space homepage (root page with no parent)

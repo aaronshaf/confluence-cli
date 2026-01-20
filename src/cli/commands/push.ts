@@ -1,18 +1,18 @@
 import { confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
-import { existsSync, readFileSync, renameSync, writeFileSync, mkdtempSync, unlinkSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { basename, resolve } from 'node:path';
 import { ConfigManager } from '../../lib/config.js';
 import { ConfluenceClient, type CreatePageRequest, type UpdatePageRequest } from '../../lib/confluence-client/index.js';
 import { EXIT_CODES, PageNotFoundError, VersionConflictError } from '../../lib/errors.js';
 import { detectPushCandidates, type PushCandidate } from '../../lib/file-scanner.js';
 import {
   buildPageLookupMap,
+  extractH1Title,
   HtmlConverter,
   parseMarkdown,
   serializeMarkdown,
-  slugify,
+  stripH1Title,
   type PageFrontmatter,
 } from '../../lib/markdown/index.js';
 import {
@@ -22,6 +22,8 @@ import {
   writeSpaceConfig,
   type SpaceConfigWithState,
 } from '../../lib/space-config.js';
+import { handleFileRename } from './file-rename.js';
+import { ensureFolderHierarchy, FolderHierarchyError } from './folder-hierarchy.js';
 
 export interface PushCommandOptions {
   file?: string;
@@ -29,99 +31,10 @@ export interface PushCommandOptions {
   dryRun?: boolean;
 }
 
-// Constants
-const INDEX_FILES = ['index.md', 'README.md'] as const;
 // Confluence Cloud has a ~65k character limit for page content in Storage Format
 // This is an approximate limit - the actual limit depends on the complexity of the HTML
 // Reference: https://confluence.atlassian.com/doc/confluence-cloud-document-and-restriction-limits-938777919.html
 const MAX_PAGE_SIZE = 65000;
-
-/**
- * Result of file rename operation
- */
-interface RenameResult {
-  finalPath: string;
-  wasRenamed: boolean;
-}
-
-/**
- * Handle file renaming when title changes
- * Returns the final local path for updating sync state
- * Uses atomic operations: writes to temp file first, then renames
- */
-function handleFileRename(
-  filePath: string,
-  originalRelativePath: string,
-  expectedTitle: string,
-  updatedMarkdown: string,
-): RenameResult {
-  const currentFilename = basename(filePath);
-  const currentDir = dirname(filePath);
-  const expectedSlug = slugify(expectedTitle);
-  const expectedFilename = `${expectedSlug}.md`;
-  let finalLocalPath = originalRelativePath.replace(/^\.\//, '');
-
-  const isIndexFile = INDEX_FILES.includes(currentFilename as (typeof INDEX_FILES)[number]);
-
-  // Write to temp file first for atomicity
-  const tempDir = mkdtempSync(join(tmpdir(), 'cn-push-'));
-  const tempFile = join(tempDir, 'temp.md');
-  writeFileSync(tempFile, updatedMarkdown, 'utf-8');
-
-  try {
-    if (!isIndexFile && expectedFilename !== currentFilename && expectedSlug) {
-      const newFilePath = join(currentDir, expectedFilename);
-
-      if (existsSync(newFilePath)) {
-        console.log(chalk.yellow(`  Note: Keeping filename "${currentFilename}" (${expectedFilename} already exists)`));
-        // Atomic rename: temp file -> original file
-        renameSync(tempFile, filePath);
-        return { finalPath: finalLocalPath, wasRenamed: false };
-      }
-
-      // Warn user about automatic rename
-      console.log(chalk.cyan(`  Note: File will be renamed to match page title`));
-
-      // Atomic operations: remove old file, move temp to new location
-      const backupPath = `${filePath}.bak`;
-      renameSync(filePath, backupPath);
-      try {
-        renameSync(tempFile, newFilePath);
-        // Clean up backup only after successful rename
-        try {
-          unlinkSync(backupPath);
-        } catch {
-          // Ignore cleanup errors
-        }
-      } catch (error) {
-        // Restore from backup if rename fails
-        try {
-          renameSync(backupPath, filePath);
-        } catch {
-          // If restore fails, log the backup location
-          console.error(chalk.red(`  Error: Failed to rename file. Backup available at: ${backupPath}`));
-        }
-        throw error;
-      }
-
-      const relativeDir = dirname(finalLocalPath);
-      finalLocalPath = relativeDir === '.' ? expectedFilename : join(relativeDir, expectedFilename);
-      console.log(chalk.cyan(`  Renamed: ${currentFilename} → ${expectedFilename}`));
-      return { finalPath: finalLocalPath, wasRenamed: true };
-    }
-
-    // Atomic rename: temp file -> original file
-    renameSync(tempFile, filePath);
-    return { finalPath: finalLocalPath, wasRenamed: false };
-  } finally {
-    // Always clean up temp directory
-    try {
-      rmSync(tempDir, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
-    }
-  }
-}
 
 /**
  * Push command - pushes local markdown files to Confluence
@@ -166,7 +79,7 @@ export async function pushCommand(options: PushCommandOptions): Promise<void> {
   try {
     await pushSingleFile(client, config, spaceConfig, directory, options.file, options);
   } catch (error) {
-    if (error instanceof PushError) {
+    if (error instanceof PushError || error instanceof FolderHierarchyError) {
       process.exit(error.exitCode);
     }
     // Unexpected error - log and exit with general error code
@@ -205,18 +118,33 @@ async function pushSingleFile(
   const markdownContent = readFileSync(filePath, 'utf-8');
   const { frontmatter, content } = parseMarkdown(markdownContent);
 
-  // Get title from frontmatter or filename
+  // Get title: frontmatter > H1 heading > filename
   const currentFilename = basename(filePath, '.md');
-  const title = frontmatter.title || currentFilename;
+  const h1Title = extractH1Title(content);
+  const title = frontmatter.title || h1Title || currentFilename;
 
-  // Warn if no title in frontmatter for new pages
-  if (!frontmatter.page_id && !frontmatter.title) {
-    console.log(chalk.yellow(`  Note: No title in frontmatter, using filename: "${title}"`));
+  // Strip H1 from content - Confluence displays title separately
+  const bodyContent = stripH1Title(content);
+
+  // Warn if using filename fallback for new pages
+  if (!frontmatter.page_id && !frontmatter.title && !h1Title) {
+    console.log(chalk.yellow(`  Note: No title found, using filename: "${title}"`));
   }
 
   // Check if this is a new page (no page_id) or existing page
   if (!frontmatter.page_id) {
-    await createNewPage(client, config, spaceConfig, directory, filePath, file, options, frontmatter, content, title);
+    await createNewPage(
+      client,
+      config,
+      spaceConfig,
+      directory,
+      filePath,
+      file,
+      options,
+      frontmatter,
+      bodyContent,
+      title,
+    );
   } else {
     await updateExistingPage(
       client,
@@ -227,7 +155,7 @@ async function pushSingleFile(
       file,
       options,
       frontmatter,
-      content,
+      bodyContent,
       title,
     );
   }
@@ -297,8 +225,8 @@ async function pushBatch(
       pushed++;
     } catch (error) {
       // Don't exit on individual failures in batch mode
-      // PushError already printed its message, other errors need printing
-      if (!(error instanceof PushError)) {
+      // PushError/FolderHierarchyError already printed their message, other errors need printing
+      if (!(error instanceof PushError) && !(error instanceof FolderHierarchyError)) {
         console.error(chalk.red(`  Failed: ${error instanceof Error ? error.message : 'Unknown error'}`));
       }
       failed++;
@@ -408,7 +336,13 @@ async function createNewPage(
     console.log('');
   }
 
-  // Validate parent_id if specified
+  // Determine parent handling - either explicit parent_id or auto-create folder hierarchy
+  let parentId: string | undefined = frontmatter.parent_id ?? undefined;
+  let intendedParentId: string | undefined; // Track intended parent for retry on move failure
+  let shouldUseMoveWorkaround = false;
+  let currentConfig = spaceConfig;
+
+  // Validate explicit parent_id if specified
   if (frontmatter.parent_id) {
     try {
       console.log(chalk.gray('  Validating parent page...'));
@@ -422,14 +356,24 @@ async function createNewPage(
       }
       throw error;
     }
+  } else {
+    // No explicit parent_id - check if file is in a subdirectory
+    // If so, ensure folder hierarchy exists (ADR-0023)
+    const result = await ensureFolderHierarchy(client, spaceConfig, directory, relativePath, options.dryRun);
+    parentId = result.parentId;
+    intendedParentId = result.parentId; // Save for potential retry
+    shouldUseMoveWorkaround = result.shouldUseMoveWorkaround;
+    currentConfig = result.updatedConfig;
   }
 
   // Build create request
+  // Note: If shouldUseMoveWorkaround is true, we create page at space root first, then move to folder
+  // This is because Confluence v2 API doesn't support creating pages directly under folders
   const createRequest: CreatePageRequest = {
-    spaceId: spaceConfig.spaceId,
+    spaceId: currentConfig.spaceId,
     status: 'current',
     title,
-    parentId: frontmatter.parent_id || undefined,
+    parentId: shouldUseMoveWorkaround ? undefined : parentId,
     body: {
       representation: 'storage',
       value: html,
@@ -442,8 +386,10 @@ async function createNewPage(
     console.log(chalk.blue('--- DRY RUN MODE ---'));
     console.log(chalk.gray('Would create new page:'));
     console.log(chalk.gray(`  Title: ${title}`));
-    console.log(chalk.gray(`  Space: ${spaceConfig.spaceKey}`));
-    if (createRequest.parentId) {
+    console.log(chalk.gray(`  Space: ${currentConfig.spaceKey}`));
+    if (shouldUseMoveWorkaround && parentId) {
+      console.log(chalk.gray(`  Would move to folder ID: ${parentId}`));
+    } else if (createRequest.parentId) {
       console.log(chalk.gray(`  Parent ID: ${createRequest.parentId}`));
     }
     console.log(chalk.gray(`  Content size: ${html.length} characters`));
@@ -457,6 +403,24 @@ async function createNewPage(
     console.log(chalk.gray('  Creating page on Confluence...'));
     const createdPage = await client.createPage(createRequest);
 
+    // Move page to folder if needed (ADR-0023)
+    let moveSucceeded = false;
+    if (shouldUseMoveWorkaround && parentId) {
+      console.log(chalk.gray(`  Moving page into folder...`));
+      try {
+        await client.movePage(createdPage.id, parentId, 'append');
+        console.log(chalk.green(`  Moved page to folder`));
+        moveSucceeded = true;
+      } catch (_moveError) {
+        // If move fails, warn but don't fail the entire operation
+        // The page was created successfully, just not in the right location
+        // Preserve intendedParentId in frontmatter so user can retry
+        console.log(chalk.yellow(`  Warning: Could not move page to folder. Page created at space root.`));
+        console.log(chalk.yellow(`  The intended parent_id will be preserved for retry.`));
+        console.log(chalk.yellow(`  Run "cn push ${relativePath}" again to retry the move.`));
+      }
+    }
+
     // Set editor property to v2 to enable the new editor
     // This is needed because the V2 API with storage format defaults to legacy editor
     // See: https://community.developer.atlassian.com/t/confluence-rest-api-v2-struggling-to-create-a-page-with-the-new-editor/75235
@@ -467,16 +431,23 @@ async function createNewPage(
       console.log(chalk.yellow('  Warning: Could not set editor to v2. Page may use legacy editor.'));
     }
 
+    // Fetch updated page to get correct parentId after move (only if move succeeded)
+    const finalPage = moveSucceeded ? await client.getPage(createdPage.id, false) : createdPage;
+
     // Build complete frontmatter from response
-    const webui = createdPage._links?.webui;
+    // If move failed, preserve the intended parent_id so user can retry
+    const webui = finalPage._links?.webui || createdPage._links?.webui;
+    const effectiveParentId = moveSucceeded
+      ? (finalPage.parentId ?? undefined)
+      : (intendedParentId ?? finalPage.parentId ?? undefined);
     const newFrontmatter: PageFrontmatter = {
       page_id: createdPage.id,
       title: createdPage.title,
-      space_key: spaceConfig.spaceKey,
+      space_key: currentConfig.spaceKey,
       created_at: createdPage.createdAt,
       updated_at: createdPage.version?.createdAt,
       version: createdPage.version?.number || 1,
-      parent_id: createdPage.parentId,
+      parent_id: effectiveParentId,
       author_id: createdPage.authorId,
       last_modifier_id: createdPage.version?.authorId,
       url: webui ? `${config.confluenceUrl}/wiki${webui}` : undefined,
@@ -497,6 +468,10 @@ async function createNewPage(
     // Update .confluence.json sync state
     let updatedSpaceConfig = readSpaceConfig(directory);
     if (updatedSpaceConfig) {
+      // First, merge in any folder updates from ensureFolderHierarchy
+      if (currentConfig.folders) {
+        updatedSpaceConfig = { ...updatedSpaceConfig, folders: currentConfig.folders };
+      }
       updatedSpaceConfig = updatePageSyncInfo(updatedSpaceConfig, {
         pageId: createdPage.id,
         version: createdPage.version?.number || 1,

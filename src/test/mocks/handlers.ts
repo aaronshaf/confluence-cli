@@ -91,6 +91,27 @@ export const handlers = [
     return HttpResponse.json(validateAndReturn(FolderSchema, folder, 'Single Folder'));
   }),
 
+  // Confluence create folder mock
+  http.post('*/wiki/api/v2/folders', async ({ request }) => {
+    const body = (await request.json()) as { spaceId: string; title: string; parentId?: string };
+    const folder = createValidFolder({
+      id: `folder-${Date.now()}`,
+      title: body.title,
+      parentId: body.parentId || null,
+    });
+    return HttpResponse.json(validateAndReturn(FolderSchema, folder, 'Created Folder'));
+  }),
+
+  // Confluence move page mock (v1 API)
+  http.put('*/wiki/rest/api/content/:pageId/move/:position/:targetId', ({ params }) => {
+    return HttpResponse.json({
+      id: params.pageId as string,
+      type: 'page',
+      status: 'current',
+      title: 'Moved Page',
+    });
+  }),
+
   // Confluence user mock (v1 API - v2 doesn't have user endpoint)
   http.get('*/wiki/rest/api/user', ({ request }) => {
     const url = new URL(request.url);

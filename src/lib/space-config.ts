@@ -14,6 +14,17 @@ const PageSyncInfoSchema = Schema.Struct({
 });
 
 /**
+ * Folder sync info schema for tracking created folders
+ * Per ADR-0023: Folder push workflow support
+ */
+const FolderSyncInfoSchema = Schema.Struct({
+  folderId: Schema.String,
+  title: Schema.String,
+  parentId: Schema.optional(Schema.String),
+  localPath: Schema.String, // Directory path, e.g., "docs/api"
+});
+
+/**
  * Search configuration schema for Meilisearch integration
  */
 const SearchConfigSchema = Schema.Struct({
@@ -28,6 +39,12 @@ export type SearchConfig = Schema.Schema.Type<typeof SearchConfigSchema>;
  * Page sync information stored in .confluence.json
  */
 export type PageSyncInfo = Schema.Schema.Type<typeof PageSyncInfoSchema>;
+
+/**
+ * Folder sync information stored in .confluence.json
+ * Per ADR-0023: Folder push workflow support
+ */
+export type FolderSyncInfo = Schema.Schema.Type<typeof FolderSyncInfoSchema>;
 
 /**
  * Space configuration schema
@@ -52,6 +69,7 @@ const SpaceConfigWithStateSchema = Schema.Struct({
   lastSync: Schema.optional(Schema.String),
   syncState: Schema.optional(Schema.Record({ key: Schema.String, value: Schema.Any })),
   pages: Schema.Record({ key: Schema.String, value: PageSyncInfoSchema }),
+  folders: Schema.optional(Schema.Record({ key: Schema.String, value: FolderSyncInfoSchema })),
   search: Schema.optional(SearchConfigSchema),
 });
 
@@ -150,4 +168,53 @@ export function removePageSyncInfo(config: SpaceConfigWithState, pageId: string)
  */
 export function getTrackedPageIds(config: SpaceConfigWithState): string[] {
   return Object.keys(config.pages);
+}
+
+/**
+ * Add or update a folder in the sync state
+ * Per ADR-0023: Folder push workflow support
+ */
+export function updateFolderSyncInfo(config: SpaceConfigWithState, folderInfo: FolderSyncInfo): SpaceConfigWithState {
+  return {
+    ...config,
+    folders: {
+      ...(config.folders || {}),
+      [folderInfo.folderId]: folderInfo,
+    },
+  };
+}
+
+/**
+ * Get a folder by its local path
+ * Per ADR-0023: Folder push workflow support
+ */
+export function getFolderByPath(config: SpaceConfigWithState, localPath: string): FolderSyncInfo | undefined {
+  if (!config.folders) return undefined;
+  for (const folder of Object.values(config.folders)) {
+    if (folder.localPath === localPath) {
+      return folder;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Get a folder by its ID
+ * Per ADR-0023: Folder push workflow support
+ */
+export function getFolderById(config: SpaceConfigWithState, folderId: string): FolderSyncInfo | undefined {
+  return config.folders?.[folderId];
+}
+
+/**
+ * Remove a folder from the sync state
+ * Per ADR-0023: Folder push workflow support
+ */
+export function removeFolderSyncInfo(config: SpaceConfigWithState, folderId: string): SpaceConfigWithState {
+  if (!config.folders) return config;
+  const { [folderId]: _, ...remainingFolders } = config.folders;
+  return {
+    ...config,
+    folders: remainingFolders,
+  };
 }

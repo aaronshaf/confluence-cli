@@ -11,8 +11,13 @@ import {
   updatePageSyncInfo,
   removePageSyncInfo,
   getTrackedPageIds,
+  updateFolderSyncInfo,
+  getFolderByPath,
+  getFolderById,
+  removeFolderSyncInfo,
   type SpaceConfigWithState,
   type PageSyncInfo,
+  type FolderSyncInfo,
 } from '../lib/space-config.js';
 
 describe('space-config', () => {
@@ -286,6 +291,209 @@ describe('space-config', () => {
       const ids = getTrackedPageIds(config);
 
       expect(ids).toHaveLength(0);
+    });
+  });
+
+  describe('updateFolderSyncInfo', () => {
+    test('adds new folder', () => {
+      const config: SpaceConfigWithState = {
+        spaceKey: 'TEST',
+        spaceId: 'space-123',
+        spaceName: 'Test Space',
+        pages: {},
+      };
+
+      const folderInfo: FolderSyncInfo = {
+        folderId: 'folder-1',
+        title: 'docs',
+        localPath: 'docs',
+      };
+
+      const updated = updateFolderSyncInfo(config, folderInfo);
+
+      expect(updated.folders).toBeDefined();
+      expect(updated.folders?.['folder-1']).toBeDefined();
+      expect(updated.folders?.['folder-1'].title).toBe('docs');
+      expect(updated.folders?.['folder-1'].localPath).toBe('docs');
+    });
+
+    test('updates existing folder', () => {
+      const config: SpaceConfigWithState = {
+        spaceKey: 'TEST',
+        spaceId: 'space-123',
+        spaceName: 'Test Space',
+        pages: {},
+        folders: {
+          'folder-1': {
+            folderId: 'folder-1',
+            title: 'docs',
+            localPath: 'docs',
+          },
+        },
+      };
+
+      const folderInfo: FolderSyncInfo = {
+        folderId: 'folder-1',
+        title: 'documentation',
+        localPath: 'docs',
+      };
+
+      const updated = updateFolderSyncInfo(config, folderInfo);
+
+      expect(updated.folders?.['folder-1'].title).toBe('documentation');
+    });
+
+    test('does not mutate original config', () => {
+      const config: SpaceConfigWithState = {
+        spaceKey: 'TEST',
+        spaceId: 'space-123',
+        spaceName: 'Test Space',
+        pages: {},
+      };
+
+      const folderInfo: FolderSyncInfo = {
+        folderId: 'folder-1',
+        title: 'docs',
+        localPath: 'docs',
+      };
+
+      const updated = updateFolderSyncInfo(config, folderInfo);
+
+      expect(config.folders).toBeUndefined();
+      expect(updated).not.toBe(config);
+    });
+  });
+
+  describe('getFolderByPath', () => {
+    test('returns folder matching path', () => {
+      const config: SpaceConfigWithState = {
+        spaceKey: 'TEST',
+        spaceId: 'space-123',
+        spaceName: 'Test Space',
+        pages: {},
+        folders: {
+          'folder-1': { folderId: 'folder-1', title: 'docs', localPath: 'docs' },
+          'folder-2': { folderId: 'folder-2', title: 'api', parentId: 'folder-1', localPath: 'docs/api' },
+        },
+      };
+
+      const folder = getFolderByPath(config, 'docs/api');
+
+      expect(folder).toBeDefined();
+      expect(folder?.folderId).toBe('folder-2');
+      expect(folder?.title).toBe('api');
+    });
+
+    test('returns undefined for non-existent path', () => {
+      const config: SpaceConfigWithState = {
+        spaceKey: 'TEST',
+        spaceId: 'space-123',
+        spaceName: 'Test Space',
+        pages: {},
+        folders: {
+          'folder-1': { folderId: 'folder-1', title: 'docs', localPath: 'docs' },
+        },
+      };
+
+      const folder = getFolderByPath(config, 'nonexistent');
+
+      expect(folder).toBeUndefined();
+    });
+
+    test('returns undefined when no folders exist', () => {
+      const config: SpaceConfigWithState = {
+        spaceKey: 'TEST',
+        spaceId: 'space-123',
+        spaceName: 'Test Space',
+        pages: {},
+      };
+
+      const folder = getFolderByPath(config, 'docs');
+
+      expect(folder).toBeUndefined();
+    });
+  });
+
+  describe('getFolderById', () => {
+    test('returns folder by ID', () => {
+      const config: SpaceConfigWithState = {
+        spaceKey: 'TEST',
+        spaceId: 'space-123',
+        spaceName: 'Test Space',
+        pages: {},
+        folders: {
+          'folder-1': { folderId: 'folder-1', title: 'docs', localPath: 'docs' },
+          'folder-2': { folderId: 'folder-2', title: 'api', localPath: 'docs/api' },
+        },
+      };
+
+      const folder = getFolderById(config, 'folder-1');
+
+      expect(folder).toBeDefined();
+      expect(folder?.title).toBe('docs');
+    });
+
+    test('returns undefined for non-existent ID', () => {
+      const config: SpaceConfigWithState = {
+        spaceKey: 'TEST',
+        spaceId: 'space-123',
+        spaceName: 'Test Space',
+        pages: {},
+        folders: {
+          'folder-1': { folderId: 'folder-1', title: 'docs', localPath: 'docs' },
+        },
+      };
+
+      const folder = getFolderById(config, 'nonexistent');
+
+      expect(folder).toBeUndefined();
+    });
+  });
+
+  describe('removeFolderSyncInfo', () => {
+    test('removes existing folder', () => {
+      const config: SpaceConfigWithState = {
+        spaceKey: 'TEST',
+        spaceId: 'space-123',
+        spaceName: 'Test Space',
+        pages: {},
+        folders: {
+          'folder-1': { folderId: 'folder-1', title: 'docs', localPath: 'docs' },
+          'folder-2': { folderId: 'folder-2', title: 'api', localPath: 'docs/api' },
+        },
+      };
+
+      const updated = removeFolderSyncInfo(config, 'folder-1');
+
+      expect(updated.folders?.['folder-1']).toBeUndefined();
+      expect(updated.folders?.['folder-2']).toBeDefined();
+    });
+
+    test('does nothing for non-existent folder', () => {
+      const config: SpaceConfigWithState = {
+        spaceKey: 'TEST',
+        spaceId: 'space-123',
+        spaceName: 'Test Space',
+        pages: {},
+        folders: {},
+      };
+
+      const updated = removeFolderSyncInfo(config, 'folder-1');
+
+      expect(Object.keys(updated.folders || {})).toHaveLength(0);
+    });
+
+    test('handles config with no folders field', () => {
+      const config: SpaceConfigWithState = {
+        spaceKey: 'TEST',
+        spaceId: 'space-123',
+        spaceName: 'Test Space',
+        pages: {},
+      };
+
+      const updated = removeFolderSyncInfo(config, 'folder-1');
+
+      expect(updated.folders).toBeUndefined();
     });
   });
 });

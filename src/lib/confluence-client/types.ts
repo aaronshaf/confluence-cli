@@ -213,6 +213,27 @@ export const CreatePageRequestSchema = Schema.Struct({
 export type CreatePageRequest = Schema.Schema.Type<typeof CreatePageRequestSchema>;
 
 /**
+ * Request body for creating a new folder
+ */
+export const CreateFolderRequestSchema = Schema.Struct({
+  spaceId: Schema.String,
+  title: Schema.String,
+  parentId: Schema.optional(Schema.String),
+});
+export type CreateFolderRequest = Schema.Schema.Type<typeof CreateFolderRequestSchema>;
+
+/**
+ * Response schema for move page operation (v1 API)
+ */
+export const MovePageResponseSchema = Schema.Struct({
+  id: Schema.String,
+  type: Schema.String,
+  status: Schema.String,
+  title: Schema.String,
+});
+export type MovePageResponse = Schema.Schema.Type<typeof MovePageResponseSchema>;
+
+/**
  * Page with children tree structure (for building hierarchy)
  */
 export interface PageTreeNode {

@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { HttpResponse, http } from 'msw';
 import { ConfluenceClient } from '../lib/confluence-client/client.js';
-import { ApiError, PageNotFoundError, VersionConflictError } from '../lib/errors.js';
+import { ApiError, FolderNotFoundError, PageNotFoundError, VersionConflictError } from '../lib/errors.js';
 import { server } from './setup-msw.js';
-import { createValidPage } from './msw-schema-validation.js';
+import { createValidFolder, createValidPage } from './msw-schema-validation.js';
 
 const testConfig = {
   confluenceUrl: 'https://test.atlassian.net',
@@ -360,6 +360,198 @@ describe('ConfluenceClient - Push Operations', () => {
       expect(async () => {
         await client.setContentProperty('page-123', 'editor', 'v2');
       }).toThrow();
+    });
+  });
+
+  describe('movePage', () => {
+    test('moves a page to a folder successfully', async () => {
+      server.use(
+        http.put('*/wiki/rest/api/content/page-123/move/append/folder-456', () => {
+          return HttpResponse.json({
+            id: 'page-123',
+            type: 'page',
+            status: 'current',
+            title: 'Moved Page',
+          });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+      const result = await client.movePage('page-123', 'folder-456', 'append');
+
+      expect(result.id).toBe('page-123');
+      expect(result.status).toBe('current');
+    });
+
+    test('throws on 404 when page not found', async () => {
+      server.use(
+        http.put('*/wiki/rest/api/content/missing-page/move/append/folder-456', () => {
+          return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+
+      await expect(client.movePage('missing-page', 'folder-456')).rejects.toThrow();
+    });
+
+    test('throws on 404 when target folder not found', async () => {
+      server.use(
+        http.put('*/wiki/rest/api/content/page-123/move/append/missing-folder', () => {
+          return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+
+      await expect(client.movePage('page-123', 'missing-folder')).rejects.toThrow();
+    });
+
+    test('throws on 403 permission denied', async () => {
+      server.use(
+        http.put('*/wiki/rest/api/content/page-123/move/append/folder-456', () => {
+          return HttpResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+
+      try {
+        await client.movePage('page-123', 'folder-456');
+        expect.unreachable('Should have thrown');
+      } catch (error) {
+        expect(String(error)).toContain('Access denied');
+      }
+    });
+
+    test('handles 401 authentication error', async () => {
+      server.use(
+        http.put('*/wiki/rest/api/content/page-123/move/append/folder-456', () => {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+
+      try {
+        await client.movePage('page-123', 'folder-456');
+        expect.unreachable('Should have thrown');
+      } catch (error) {
+        expect(String(error)).toContain('Invalid credentials');
+      }
+    });
+  });
+
+  describe('createFolder', () => {
+    test('creates a folder successfully', async () => {
+      server.use(
+        http.post('*/wiki/api/v2/folders', async ({ request }) => {
+          const body = (await request.json()) as { spaceId: string; title: string; parentId?: string };
+          const folder = createValidFolder({
+            id: 'new-folder-123',
+            title: body.title,
+            parentId: body.parentId || null,
+          });
+          return HttpResponse.json(folder);
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+      const folder = await client.createFolder({
+        spaceId: 'space-123',
+        title: 'New Folder',
+      });
+
+      expect(folder.id).toBe('new-folder-123');
+      expect(folder.title).toBe('New Folder');
+      expect(folder.type).toBe('folder');
+    });
+
+    test('creates a nested folder with parent', async () => {
+      server.use(
+        http.post('*/wiki/api/v2/folders', async ({ request }) => {
+          const body = (await request.json()) as { spaceId: string; title: string; parentId?: string };
+          const folder = createValidFolder({
+            id: 'child-folder-456',
+            title: body.title,
+            parentId: body.parentId || null,
+          });
+          return HttpResponse.json(folder);
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+      const folder = await client.createFolder({
+        spaceId: 'space-123',
+        title: 'Child Folder',
+        parentId: 'parent-folder-123',
+      });
+
+      expect(folder.id).toBe('child-folder-456');
+      expect(folder.parentId).toBe('parent-folder-123');
+    });
+
+    test('handles 400 duplicate folder error', async () => {
+      server.use(
+        http.post('*/wiki/api/v2/folders', () => {
+          return HttpResponse.json({ message: 'A folder with this name already exists' }, { status: 400 });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+
+      await expect(client.createFolder({ spaceId: 'space-123', title: 'Existing Folder' })).rejects.toThrow();
+    });
+
+    test('handles 409 conflict error', async () => {
+      server.use(
+        http.post('*/wiki/api/v2/folders', () => {
+          return HttpResponse.json({ message: 'Folder already exists' }, { status: 409 });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+
+      await expect(client.createFolder({ spaceId: 'space-123', title: 'Existing Folder' })).rejects.toThrow();
+    });
+  });
+
+  describe('getFolder with retry', () => {
+    test('retries on 429 rate limit', async () => {
+      let requestCount = 0;
+
+      server.use(
+        http.get('*/wiki/api/v2/folders/folder-123', () => {
+          requestCount++;
+          if (requestCount < 2) {
+            return HttpResponse.json({ error: 'Rate limited' }, { status: 429, headers: { 'Retry-After': '1' } });
+          }
+          return HttpResponse.json(createValidFolder({ id: 'folder-123', title: 'Test Folder' }));
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+      const folder = await client.getFolder('folder-123');
+
+      expect(folder.id).toBe('folder-123');
+      expect(requestCount).toBe(2);
+    });
+
+    test('throws FolderNotFoundError on 404', async () => {
+      server.use(
+        http.get('*/wiki/api/v2/folders/nonexistent', () => {
+          return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+
+      try {
+        await client.getFolder('nonexistent');
+        expect.unreachable('Should have thrown');
+      } catch (error) {
+        expect(String(error)).toContain('Folder not found: nonexistent');
+      }
     });
   });
 });

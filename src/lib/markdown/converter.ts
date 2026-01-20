@@ -372,7 +372,9 @@ export class MarkdownConverter {
     this.pageLookupMap = pageLookupMap || null;
 
     const html = page.body?.storage?.value || '';
-    const content = this.convert(html);
+    const bodyContent = this.convert(html);
+    // Add H1 with page title at the start of content (Confluence shows title separately)
+    const content = `# ${page.title}\n\n${bodyContent}`;
     const frontmatter = createFrontmatter(page, spaceKey, labels, parentTitle, baseUrl, author, lastModifier);
     const markdown = serializeMarkdown(frontmatter, content);
 

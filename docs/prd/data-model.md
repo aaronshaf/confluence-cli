@@ -147,6 +147,21 @@ synced_at: "2024-01-15T10:30:00Z"
 Page content here...
 ```
 
+### Title and H1 Heading
+
+The page title appears in two places:
+1. **Frontmatter `title` field** - The authoritative page title
+2. **H1 heading** - Added at the start of content for readability
+
+**Pull behavior:** When pulling from Confluence, an H1 heading (`# {title}`) is automatically added at the start of the content. This makes the markdown file readable standalone, since Confluence displays the title separately from the body.
+
+**Push behavior:** When pushing to Confluence, the first H1 heading is stripped from the content before converting to HTML. The title is taken from (in priority order):
+1. Frontmatter `title` field
+2. First `# H1` heading in content
+3. Filename
+
+This prevents duplicate titles appearing in Confluence (once in the page header, once in the body).
+
 ---
 
 ## Confluence API Types

@@ -250,7 +250,7 @@ cn push [file] [options]
 
 - Must be in a directory with `.confluence.json`
 - For new pages: optionally specify `parent_id` in frontmatter to set parent page
-- For new pages: title comes from frontmatter `title` field or filename
+- For new pages: title comes from frontmatter `title` field, first `# H1` heading, or filename (in that priority order)
 
 ### Output (Update Existing)
 

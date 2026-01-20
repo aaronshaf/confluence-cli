@@ -3,12 +3,23 @@ import type { Config } from '../config.js';
 import {
   ApiError,
   AuthError,
+  type FolderNotFoundError,
   NetworkError,
-  PageNotFoundError,
+  type PageNotFoundError,
   RateLimitError,
   SpaceNotFoundError,
-  VersionConflictError,
+  type VersionConflictError,
 } from '../errors.js';
+import {
+  createFolderEffect as createFolderEffectFn,
+  getFolderEffect as getFolderEffectFn,
+  movePageEffect as movePageEffectFn,
+} from './folder-operations.js';
+import {
+  createPageEffect as createPageEffectFn,
+  setContentPropertyEffect as setContentPropertyEffectFn,
+  updatePageEffect as updatePageEffectFn,
+} from './page-operations.js';
 import {
   FolderSchema,
   LabelsResponseSchema,
@@ -17,10 +28,12 @@ import {
   SpaceSchema,
   SpacesResponseSchema,
   UserSchema,
+  type CreateFolderRequest,
   type CreatePageRequest,
   type Folder,
   type Label,
   type LabelsResponse,
+  type MovePageResponse,
   type Page,
   type PagesResponse,
   type Space,
@@ -295,79 +308,7 @@ export class ConfluenceClient {
     Page,
     ApiError | AuthError | NetworkError | RateLimitError | PageNotFoundError | VersionConflictError
   > {
-    const baseUrl = this.baseUrl;
-    const authHeader = this.authHeader;
-    const url = `${baseUrl}/wiki/api/v2/pages/${request.id}`;
-
-    const makeRequest = Effect.tryPromise({
-      try: async () => {
-        const response = await fetch(url, {
-          method: 'PUT',
-          headers: {
-            Authorization: authHeader,
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(request),
-        });
-
-        if (response.status === 429) {
-          const retryAfter = response.headers.get('Retry-After');
-          throw new RateLimitError(
-            'Rate limited by Confluence API',
-            retryAfter ? Number.parseInt(retryAfter, 10) : undefined,
-          );
-        }
-
-        if (response.status === 401) {
-          throw new AuthError('Invalid credentials. Please check your email and API token.', 401);
-        }
-
-        if (response.status === 403) {
-          throw new AuthError('Access denied. Please check your permissions.', 403);
-        }
-
-        if (response.status === 404) {
-          throw new PageNotFoundError(request.id);
-        }
-
-        if (response.status === 409) {
-          // Version conflict - the remote version has changed
-          const errorData: VersionConflictResponse = await response.json().catch(() => ({}));
-          const remoteVersion = errorData?.version?.number ?? 0;
-          throw new VersionConflictError(request.version.number, remoteVersion);
-        }
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new ApiError(`API request failed: ${response.status} ${errorText}`, response.status);
-        }
-
-        return response.json();
-      },
-      catch: (error) => {
-        if (
-          error instanceof RateLimitError ||
-          error instanceof AuthError ||
-          error instanceof ApiError ||
-          error instanceof PageNotFoundError ||
-          error instanceof VersionConflictError
-        ) {
-          return error;
-        }
-        return new NetworkError(`Network error: ${error}`);
-      },
-    });
-
-    return pipe(
-      makeRequest,
-      Effect.flatMap((data) =>
-        Schema.decodeUnknown(PageSchema)(data).pipe(
-          Effect.mapError((e) => new ApiError(`Invalid response: ${e}`, 500)),
-        ),
-      ),
-      Effect.retry(rateLimitRetrySchedule),
-    );
+    return updatePageEffectFn(this.baseUrl, this.authHeader, request);
   }
 
   /**
@@ -383,62 +324,7 @@ export class ConfluenceClient {
   createPageEffect(
     request: CreatePageRequest,
   ): Effect.Effect<Page, ApiError | AuthError | NetworkError | RateLimitError> {
-    const baseUrl = this.baseUrl;
-    const authHeader = this.authHeader;
-    const url = `${baseUrl}/wiki/api/v2/pages`;
-
-    const makeRequest = Effect.tryPromise({
-      try: async () => {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            Authorization: authHeader,
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(request),
-        });
-
-        if (response.status === 429) {
-          const retryAfter = response.headers.get('Retry-After');
-          throw new RateLimitError(
-            'Rate limited by Confluence API',
-            retryAfter ? Number.parseInt(retryAfter, 10) : undefined,
-          );
-        }
-
-        if (response.status === 401) {
-          throw new AuthError('Invalid credentials. Please check your email and API token.', 401);
-        }
-
-        if (response.status === 403) {
-          throw new AuthError('Access denied. Please check your permissions.', 403);
-        }
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new ApiError(`API request failed: ${response.status} ${errorText}`, response.status);
-        }
-
-        return response.json();
-      },
-      catch: (error) => {
-        if (error instanceof RateLimitError || error instanceof AuthError || error instanceof ApiError) {
-          return error;
-        }
-        return new NetworkError(`Network error: ${error}`);
-      },
-    });
-
-    return pipe(
-      makeRequest,
-      Effect.flatMap((data) =>
-        Schema.decodeUnknown(PageSchema)(data).pipe(
-          Effect.mapError((e) => new ApiError(`Invalid response: ${e}`, 500)),
-        ),
-      ),
-      Effect.retry(rateLimitRetrySchedule),
-    );
+    return createPageEffectFn(this.baseUrl, this.authHeader, request);
   }
 
   /**
@@ -454,41 +340,7 @@ export class ConfluenceClient {
     key: string,
     value: unknown,
   ): Effect.Effect<void, ApiError | AuthError | NetworkError | RateLimitError> {
-    const baseUrl = this.baseUrl;
-    const authHeader = this.authHeader;
-    const url = `${baseUrl}/wiki/api/v2/pages/${pageId}/properties`;
-
-    const makeRequest = Effect.tryPromise({
-      try: async () => {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            Authorization: authHeader,
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ key, value }),
-        });
-
-        if (response.status === 429) {
-          const retryAfter = response.headers.get('Retry-After');
-          throw new RateLimitError('Rate limited', retryAfter ? Number.parseInt(retryAfter, 10) : undefined);
-        }
-
-        if (response.status === 401) throw new AuthError('Authentication failed', 401);
-        if (response.status === 403) throw new AuthError('Permission denied', 403);
-        if (!response.ok)
-          throw new ApiError(`Failed to set content property: ${await response.text()}`, response.status);
-      },
-      catch: (error) => {
-        if (error instanceof RateLimitError || error instanceof AuthError || error instanceof ApiError) {
-          return error;
-        }
-        return new NetworkError(`Network error: ${error}`);
-      },
-    });
-
-    return pipe(makeRequest, Effect.retry(rateLimitRetrySchedule));
+    return setContentPropertyEffectFn(this.baseUrl, this.authHeader, pageId, key, value);
   }
 
   /** Set a content property on a page (async version) */
@@ -623,8 +475,10 @@ export class ConfluenceClient {
    * Get a folder by ID (Effect version)
    * Uses v2 /folders/{id} endpoint per ADR-0018
    */
-  getFolderEffect(folderId: string): Effect.Effect<Folder, ApiError | AuthError | NetworkError | RateLimitError> {
-    return this.fetchWithRetryEffect(`/folders/${folderId}`, FolderSchema);
+  getFolderEffect(
+    folderId: string,
+  ): Effect.Effect<Folder, ApiError | AuthError | NetworkError | RateLimitError | FolderNotFoundError> {
+    return getFolderEffectFn(this.baseUrl, this.authHeader, folderId);
   }
 
   /**
@@ -675,6 +529,46 @@ export class ConfluenceClient {
     const pages = await this.getAllPagesInSpace(spaceId);
     const folders = await this.discoverFolders(pages);
     return { pages, folders };
+  }
+
+  /**
+   * Create a new folder (Effect version)
+   * Uses POST /wiki/api/v2/folders endpoint
+   */
+  createFolderEffect(
+    request: CreateFolderRequest,
+  ): Effect.Effect<Folder, ApiError | AuthError | NetworkError | RateLimitError> {
+    return createFolderEffectFn(this.baseUrl, this.authHeader, request);
+  }
+
+  /**
+   * Create a new folder (async version)
+   */
+  async createFolder(request: CreateFolderRequest): Promise<Folder> {
+    return Effect.runPromise(this.createFolderEffect(request));
+  }
+
+  /**
+   * Move a page to a new parent (Effect version)
+   * Uses v1 API: PUT /wiki/rest/api/content/{id}/move/{position}/{targetId}
+   */
+  movePageEffect(
+    pageId: string,
+    targetId: string,
+    position: 'append' | 'prepend' = 'append',
+  ): Effect.Effect<MovePageResponse, ApiError | AuthError | NetworkError | RateLimitError | PageNotFoundError> {
+    return movePageEffectFn(this.baseUrl, this.authHeader, pageId, targetId, position);
+  }
+
+  /**
+   * Move a page to a new parent (async version)
+   */
+  async movePage(
+    pageId: string,
+    targetId: string,
+    position: 'append' | 'prepend' = 'append',
+  ): Promise<MovePageResponse> {
+    return Effect.runPromise(this.movePageEffect(pageId, targetId, position));
   }
 
   // ================== Verification ==================

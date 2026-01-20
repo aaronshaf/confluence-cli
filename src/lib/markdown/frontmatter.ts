@@ -95,3 +95,20 @@ export function extractPageId(markdown: string): string | undefined {
   const { frontmatter } = parseMarkdown(markdown);
   return frontmatter.page_id;
 }
+
+/**
+ * Extract the first H1 heading from markdown content
+ * Returns undefined if no H1 is found
+ */
+export function extractH1Title(content: string): string | undefined {
+  const match = content.match(/^#\s+(.+)$/m);
+  return match?.[1]?.trim();
+}
+
+/**
+ * Strip the first H1 heading from markdown content
+ * Used when pushing to Confluence (title is displayed separately)
+ */
+export function stripH1Title(content: string): string {
+  return content.replace(/^#\s+.+\n*/, '').trim();
+}

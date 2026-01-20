@@ -162,6 +162,21 @@ export class VersionConflictError extends Error {
 }
 
 /**
+ * Folder not found errors (404 when folder is deleted on Confluence)
+ * Per ADR-0023: Folder push workflow support
+ */
+export class FolderNotFoundError extends Error {
+  readonly _tag = 'FolderNotFoundError' as const;
+  readonly folderId: string;
+
+  constructor(folderId: string) {
+    super(`Folder not found: ${folderId}`);
+    this.name = 'FolderNotFoundError';
+    this.folderId = folderId;
+  }
+}
+
+/**
  * Meilisearch connection errors
  */
 export class MeilisearchConnectionError extends Error {
@@ -205,6 +220,7 @@ export type CnError =
   | SpaceNotFoundError
   | PageNotFoundError
   | VersionConflictError
+  | FolderNotFoundError
   | MeilisearchConnectionError
   | MeilisearchIndexError;
 
@@ -223,6 +239,7 @@ export const EXIT_CODES = {
   VERSION_CONFLICT: 8,
   MEILISEARCH_CONNECTION: 9,
   MEILISEARCH_INDEX: 10,
+  FOLDER_NOT_FOUND: 11,
 } as const;
 
 /**
@@ -244,6 +261,8 @@ export function getExitCodeForError(error: CnError): number {
       return EXIT_CODES.PAGE_NOT_FOUND;
     case 'VersionConflictError':
       return EXIT_CODES.VERSION_CONFLICT;
+    case 'FolderNotFoundError':
+      return EXIT_CODES.FOLDER_NOT_FOUND;
     case 'MeilisearchConnectionError':
       return EXIT_CODES.MEILISEARCH_CONNECTION;
     case 'MeilisearchIndexError':

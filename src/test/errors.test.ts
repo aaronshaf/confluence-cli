@@ -12,6 +12,7 @@ import {
   SpaceNotFoundError,
   PageNotFoundError,
   VersionConflictError,
+  FolderNotFoundError,
   EXIT_CODES,
   getExitCodeForError,
 } from '../lib/errors.js';
@@ -119,6 +120,15 @@ describe('Error types', () => {
       expect(error.message).toContain('remote version 5');
     });
   });
+
+  describe('FolderNotFoundError', () => {
+    test('has correct _tag and folderId', () => {
+      const error = new FolderNotFoundError('folder-123');
+      expect(error._tag).toBe('FolderNotFoundError');
+      expect(error.folderId).toBe('folder-123');
+      expect(error.message).toBe('Folder not found: folder-123');
+    });
+  });
 });
 
 describe('EXIT_CODES', () => {
@@ -132,6 +142,7 @@ describe('EXIT_CODES', () => {
     expect(EXIT_CODES.INVALID_ARGUMENTS).toBe(6);
     expect(EXIT_CODES.PAGE_NOT_FOUND).toBe(7);
     expect(EXIT_CODES.VERSION_CONFLICT).toBe(8);
+    expect(EXIT_CODES.FOLDER_NOT_FOUND).toBe(11);
   });
 });
 
@@ -174,6 +185,11 @@ describe('getExitCodeForError', () => {
   test('returns VERSION_CONFLICT for VersionConflictError', () => {
     const error = new VersionConflictError(3, 5);
     expect(getExitCodeForError(error)).toBe(EXIT_CODES.VERSION_CONFLICT);
+  });
+
+  test('returns FOLDER_NOT_FOUND for FolderNotFoundError', () => {
+    const error = new FolderNotFoundError('folder-123');
+    expect(getExitCodeForError(error)).toBe(EXIT_CODES.FOLDER_NOT_FOUND);
   });
 
   test('returns GENERAL_ERROR for other errors', () => {

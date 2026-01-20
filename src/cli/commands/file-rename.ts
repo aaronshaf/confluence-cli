@@ -1,0 +1,99 @@
+/**
+ * File rename utilities for push operations
+ */
+
+import { existsSync, mkdtempSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, dirname, join } from 'node:path';
+import chalk from 'chalk';
+import { slugify } from '../../lib/markdown/index.js';
+
+// Index files that should not be renamed based on title
+const INDEX_FILES = ['index.md', 'README.md'] as const;
+
+/**
+ * Result of file rename operation
+ */
+export interface RenameResult {
+  finalPath: string;
+  wasRenamed: boolean;
+}
+
+/**
+ * Handle file renaming when title changes
+ * Returns the final local path for updating sync state
+ * Uses atomic operations: writes to temp file first, then renames
+ */
+export function handleFileRename(
+  filePath: string,
+  originalRelativePath: string,
+  expectedTitle: string,
+  updatedMarkdown: string,
+): RenameResult {
+  const currentFilename = basename(filePath);
+  const currentDir = dirname(filePath);
+  const expectedSlug = slugify(expectedTitle);
+  const expectedFilename = `${expectedSlug}.md`;
+  let finalLocalPath = originalRelativePath.replace(/^\.\//, '');
+
+  const isIndexFile = INDEX_FILES.includes(currentFilename as (typeof INDEX_FILES)[number]);
+
+  // Write to temp file first for atomicity
+  const tempDir = mkdtempSync(join(tmpdir(), 'cn-push-'));
+  const tempFile = join(tempDir, 'temp.md');
+  writeFileSync(tempFile, updatedMarkdown, 'utf-8');
+
+  try {
+    if (!isIndexFile && expectedFilename !== currentFilename && expectedSlug) {
+      const newFilePath = join(currentDir, expectedFilename);
+
+      if (existsSync(newFilePath)) {
+        console.log(chalk.yellow(`  Note: Keeping filename "${currentFilename}" (${expectedFilename} already exists)`));
+        // Atomic rename: temp file -> original file
+        renameSync(tempFile, filePath);
+        return { finalPath: finalLocalPath, wasRenamed: false };
+      }
+
+      // Warn user about automatic rename
+      console.log(chalk.cyan(`  Note: File will be renamed to match page title`));
+
+      // Atomic operations: remove old file, move temp to new location
+      const backupPath = `${filePath}.bak`;
+      renameSync(filePath, backupPath);
+      try {
+        renameSync(tempFile, newFilePath);
+        // Clean up backup only after successful rename
+        try {
+          unlinkSync(backupPath);
+        } catch {
+          // Ignore cleanup errors
+        }
+      } catch (error) {
+        // Restore from backup if rename fails
+        try {
+          renameSync(backupPath, filePath);
+        } catch {
+          // If restore fails, log the backup location
+          console.error(chalk.red(`  Error: Failed to rename file. Backup available at: ${backupPath}`));
+        }
+        throw error;
+      }
+
+      const relativeDir = dirname(finalLocalPath);
+      finalLocalPath = relativeDir === '.' ? expectedFilename : join(relativeDir, expectedFilename);
+      console.log(chalk.cyan(`  Renamed: ${currentFilename} → ${expectedFilename}`));
+      return { finalPath: finalLocalPath, wasRenamed: true };
+    }
+
+    // Atomic rename: temp file -> original file
+    renameSync(tempFile, filePath);
+    return { finalPath: finalLocalPath, wasRenamed: false };
+  } finally {
+    // Always clean up temp directory
+    try {
+      rmSync(tempDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
+}

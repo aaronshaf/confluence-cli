@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { http, HttpResponse } from 'msw';
 import { Effect } from 'effect';
 import { ConfluenceClient } from '../lib/confluence-client/client.js';
-import { AuthError, RateLimitError, SpaceNotFoundError } from '../lib/errors.js';
+import { AuthError, FolderNotFoundError, RateLimitError, SpaceNotFoundError } from '../lib/errors.js';
+import { createValidFolder } from './msw-schema-validation.js';
 import { server } from './setup-msw.js';
 import { createValidPage, createValidSpace } from './msw-schema-validation.js';
 
@@ -237,6 +238,145 @@ describe('ConfluenceClient', () => {
       const folders = await client.discoverFolders(pages);
 
       expect(folders).toHaveLength(0);
+    });
+  });
+
+  describe('getFolder (404 handling)', () => {
+    test('throws FolderNotFoundError on 404', async () => {
+      server.use(
+        http.get('*/wiki/api/v2/folders/:folderId', () => {
+          return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+
+      try {
+        await client.getFolder('nonexistent-folder');
+        expect.unreachable('Should have thrown');
+      } catch (error) {
+        // Effect wraps errors - check the message
+        expect(String(error)).toContain('Folder not found: nonexistent-folder');
+      }
+    });
+  });
+
+  describe('createFolder', () => {
+    test('creates a folder successfully', async () => {
+      server.use(
+        http.post('*/wiki/api/v2/folders', async ({ request }) => {
+          const body = (await request.json()) as { spaceId: string; title: string; parentId?: string };
+          const folder = createValidFolder({
+            id: 'new-folder-123',
+            title: body.title,
+            parentId: body.parentId || null,
+          });
+          return HttpResponse.json(folder);
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+      const folder = await client.createFolder({
+        spaceId: 'space-123',
+        title: 'New Folder',
+      });
+
+      expect(folder.id).toBe('new-folder-123');
+      expect(folder.title).toBe('New Folder');
+      expect(folder.type).toBe('folder');
+    });
+
+    test('creates a folder with parent', async () => {
+      server.use(
+        http.post('*/wiki/api/v2/folders', async ({ request }) => {
+          const body = (await request.json()) as { spaceId: string; title: string; parentId?: string };
+          const folder = createValidFolder({
+            id: 'child-folder-123',
+            title: body.title,
+            parentId: body.parentId || null,
+          });
+          return HttpResponse.json(folder);
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+      const folder = await client.createFolder({
+        spaceId: 'space-123',
+        title: 'Child Folder',
+        parentId: 'parent-folder-123',
+      });
+
+      expect(folder.id).toBe('child-folder-123');
+      expect(folder.parentId).toBe('parent-folder-123');
+    });
+
+    test('handles 401 authentication error', async () => {
+      server.use(
+        http.post('*/wiki/api/v2/folders', () => {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+
+      try {
+        await client.createFolder({ spaceId: 'space-123', title: 'Test' });
+        expect.unreachable('Should have thrown');
+      } catch (error) {
+        // Effect wraps errors - check the message
+        expect(String(error)).toContain('Invalid credentials');
+      }
+    });
+  });
+
+  describe('movePage', () => {
+    test('moves a page successfully', async () => {
+      server.use(
+        http.put('*/wiki/rest/api/content/:pageId/move/:position/:targetId', ({ params }) => {
+          return HttpResponse.json({
+            id: params.pageId,
+            type: 'page',
+            status: 'current',
+            title: 'Moved Page',
+          });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+      const result = await client.movePage('page-123', 'folder-456', 'append');
+
+      expect(result.id).toBe('page-123');
+      expect(result.status).toBe('current');
+    });
+
+    test('handles 404 when page not found', async () => {
+      server.use(
+        http.put('*/wiki/rest/api/content/:pageId/move/:position/:targetId', () => {
+          return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+
+      await expect(client.movePage('nonexistent', 'folder-456')).rejects.toThrow();
+    });
+
+    test('handles 401 authentication error', async () => {
+      server.use(
+        http.put('*/wiki/rest/api/content/:pageId/move/:position/:targetId', () => {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+
+      try {
+        await client.movePage('page-123', 'folder-456');
+        expect.unreachable('Should have thrown');
+      } catch (error) {
+        // Effect wraps errors - check the message
+        expect(String(error)).toContain('Invalid credentials');
+      }
     });
   });
 
