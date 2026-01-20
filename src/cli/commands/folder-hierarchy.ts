@@ -21,8 +21,6 @@ import {
  */
 export interface FolderHierarchyResult {
   parentId: string | undefined;
-  /** True if page should be created at root then moved to folder (v2 API workaround) */
-  shouldUseMoveWorkaround: boolean;
   updatedConfig: SpaceConfigWithState;
 }
 
@@ -78,13 +76,13 @@ export async function ensureFolderHierarchy(
 
   // Root level file - no folder needed
   if (dirPath === '.') {
-    return { parentId: undefined, shouldUseMoveWorkaround: false, updatedConfig: spaceConfig };
+    return { parentId: undefined, updatedConfig: spaceConfig };
   }
 
   // Split directory path into segments
   const segments = dirPath.split('/').filter((s) => s.length > 0);
   if (segments.length === 0) {
-    return { parentId: undefined, shouldUseMoveWorkaround: false, updatedConfig: spaceConfig };
+    return { parentId: undefined, updatedConfig: spaceConfig };
   }
 
   // Path traversal validation - reject paths with ..
@@ -150,8 +148,7 @@ export async function ensureFolderHierarchy(
     if (dryRun) {
       console.log(chalk.gray(`  Would create folder: ${currentPath}`));
       // In dry run, we can't continue because we don't have a real folder ID
-      // Return early indicating folders would need to be created
-      return { parentId: undefined, shouldUseMoveWorkaround: true, updatedConfig: config };
+      return { parentId: undefined, updatedConfig: config };
     }
 
     // Prompt user for confirmation before creating folder
@@ -203,5 +200,5 @@ export async function ensureFolderHierarchy(
 
   // Return the leaf folder ID - page will be created with this as parentId
   // The v2 API supports creating pages directly under folders
-  return { parentId: currentParentId, shouldUseMoveWorkaround: false, updatedConfig: config };
+  return { parentId: currentParentId, updatedConfig: config };
 }

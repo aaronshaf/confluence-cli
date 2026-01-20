@@ -36,7 +36,9 @@ export function handleFileRename(
   const currentDir = dirname(filePath);
   const expectedSlug = slugify(expectedTitle);
   const expectedFilename = `${expectedSlug}.md`;
-  let finalLocalPath = originalRelativePath.replace(/^\.\//, '');
+  // Track the current relative path (will be updated if file is renamed)
+  const currentRelativePath = originalRelativePath.replace(/^\.\//, '');
+  let finalLocalPath = currentRelativePath;
 
   const isIndexFile = INDEX_FILES.has(currentFilename.toLowerCase());
 
@@ -81,14 +83,14 @@ export function handleFileRename(
         throw error;
       }
 
-      const relativeDir = dirname(finalLocalPath);
-      const oldRelativePath = finalLocalPath;
-      finalLocalPath = relativeDir === '.' ? expectedFilename : join(relativeDir, expectedFilename);
+      const relativeDir = dirname(currentRelativePath);
+      const newRelativePath = relativeDir === '.' ? expectedFilename : join(relativeDir, expectedFilename);
+      finalLocalPath = newRelativePath;
       console.log(chalk.cyan(`  Renamed: ${currentFilename} → ${expectedFilename}`));
 
       // Update references in other markdown files that link to the old filename
       if (spaceRoot) {
-        const updatedFiles = updateReferencesAfterRename(spaceRoot, oldRelativePath, finalLocalPath);
+        const updatedFiles = updateReferencesAfterRename(spaceRoot, currentRelativePath, newRelativePath);
         if (updatedFiles.length > 0) {
           console.log(chalk.cyan(`  Updated ${updatedFiles.length} file(s) with new link path`));
         }

@@ -168,6 +168,10 @@ function escapeRegex(str: string): string {
  *
  * This handles cases like [text], [text [nested]], [text (with) parens], etc.
  *
+ * Known limitations (not currently supported):
+ * - Links with titles: [text](path.md "title")
+ * - Reference-style links: [text][ref] with [ref]: path.md
+ *
  * @param link - The link href to match (will be escaped)
  * @returns RegExp pattern that matches markdown links with the given href
  */
