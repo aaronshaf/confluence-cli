@@ -8,8 +8,8 @@ import { basename, dirname, join } from 'node:path';
 import chalk from 'chalk';
 import { slugify } from '../../lib/markdown/index.js';
 
-// Index files that should not be renamed based on title
-const INDEX_FILES = ['index.md', 'README.md'] as const;
+// Index files that should not be renamed based on title (case-insensitive check)
+const INDEX_FILES = new Set(['index.md', 'readme.md']);
 
 /**
  * Result of file rename operation
@@ -36,7 +36,7 @@ export function handleFileRename(
   const expectedFilename = `${expectedSlug}.md`;
   let finalLocalPath = originalRelativePath.replace(/^\.\//, '');
 
-  const isIndexFile = INDEX_FILES.includes(currentFilename as (typeof INDEX_FILES)[number]);
+  const isIndexFile = INDEX_FILES.has(currentFilename.toLowerCase());
 
   // Write to temp file first for atomicity
   const tempDir = mkdtempSync(join(tmpdir(), 'cn-push-'));
