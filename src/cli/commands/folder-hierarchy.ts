@@ -179,10 +179,34 @@ export async function ensureFolderHierarchy(
         error.message.toLowerCase().includes('already exists');
 
       if (isDuplicateError) {
-        console.error(chalk.red(`  Folder "${folderTitle}" already exists on Confluence but not in local config.`));
+        // Try to find the existing folder by title
+        console.log(chalk.gray(`  Folder "${folderTitle}" already exists, looking up...`));
+        const existingFolder = await client.findFolderByTitle(config.spaceKey, folderTitle, currentParentId);
+
+        if (existingFolder) {
+          console.log(chalk.green(`  Found existing folder: ${existingFolder.title} (id: ${existingFolder.id})`));
+
+          // Track folder in config
+          const folderInfo: FolderSyncInfo = {
+            folderId: existingFolder.id,
+            title: existingFolder.title,
+            parentId: currentParentId,
+            localPath: currentPath,
+          };
+          config = updateFolderSyncInfo(config, folderInfo);
+
+          // Save config immediately
+          writeSpaceConfig(directory, config);
+
+          currentParentId = existingFolder.id;
+          continue;
+        }
+
+        // Couldn't find the folder - fall back to error
+        console.error(chalk.red(`  Could not find existing folder "${folderTitle}" via search.`));
         console.log(chalk.yellow(`  Run "cn pull" to sync folder structure, then try push again.`));
         throw new FolderHierarchyError(
-          `Folder "${folderTitle}" exists on Confluence but not tracked locally. Run "cn pull" first.`,
+          `Folder "${folderTitle}" exists on Confluence but could not be found. Run "cn pull" first.`,
           EXIT_CODES.GENERAL_ERROR,
         );
       }

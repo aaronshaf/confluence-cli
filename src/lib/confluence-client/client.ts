@@ -549,6 +549,53 @@ export class ConfluenceClient {
   }
 
   /**
+   * Find a folder by title in a space
+   * Uses v1 CQL search API to find folders by title
+   * @param spaceKey - Space key to search in
+   * @param title - Folder title to find
+   * @param parentId - Optional parent folder ID (for nested folders)
+   * @returns Folder if found, null otherwise
+   */
+  async findFolderByTitle(spaceKey: string, title: string, parentId?: string): Promise<Folder | null> {
+    // Build CQL query - escape quotes in title
+    const escapedTitle = title.replace(/"/g, '\\"');
+    let cql = `type=folder AND space="${spaceKey}" AND title="${escapedTitle}"`;
+    if (parentId) {
+      cql += ` AND parent=${parentId}`;
+    }
+
+    const url = `${this.baseUrl}/wiki/rest/api/search?cql=${encodeURIComponent(cql)}&limit=10`;
+
+    const response = await fetch(url, {
+      headers: { Authorization: this.authHeader, Accept: 'application/json' },
+    });
+
+    if (!response.ok) {
+      // Search failed, return null rather than throwing
+      return null;
+    }
+
+    const data = await response.json();
+    const results = data?.results || [];
+
+    // Find exact title match (CQL search may return partial matches)
+    for (const result of results) {
+      if (result.content?.type === 'folder' && result.content?.title === title) {
+        // Convert v1 API result to v2 Folder format
+        const content = result.content;
+        return {
+          id: content.id,
+          type: 'folder' as const,
+          title: content.title,
+          parentId: content.ancestors?.length > 0 ? content.ancestors[content.ancestors.length - 1]?.id : undefined,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Move a page to a new parent (Effect version)
    * Uses v1 API: PUT /wiki/rest/api/content/{id}/move/{position}/{targetId}
    */
