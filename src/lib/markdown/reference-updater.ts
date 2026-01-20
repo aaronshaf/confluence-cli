@@ -114,25 +114,40 @@ function updateReferencesInFile(
     const oldLinkFromFile = relative(fileDir, oldAbsolutePath);
     const newLinkFromFile = relative(fileDir, newAbsolutePath);
 
-    // Ensure relative paths start with ./
-    const oldLink = oldLinkFromFile.startsWith('.') ? oldLinkFromFile : `${RELATIVE_PREFIX}${oldLinkFromFile}`;
-    const newLink = newLinkFromFile.startsWith('.') ? newLinkFromFile : `${RELATIVE_PREFIX}${newLinkFromFile}`;
+    // Links in markdown may or may not have ./ prefix, so we need to check both forms
+    const oldLinkWithPrefix = oldLinkFromFile.startsWith('.')
+      ? oldLinkFromFile
+      : `${RELATIVE_PREFIX}${oldLinkFromFile}`;
+    const oldLinkWithoutPrefix = oldLinkFromFile.startsWith('./') ? oldLinkFromFile.slice(2) : oldLinkFromFile;
+    const newLinkWithoutPrefix = newLinkFromFile.startsWith('./') ? newLinkFromFile.slice(2) : newLinkFromFile;
 
-    // Find and replace markdown links matching the old path
-    const linkPattern = createMarkdownLinkPattern(oldLink);
     let updatedMarkdown = markdown;
     let updateCount = 0;
 
-    // Count matches first
-    const matches = markdown.match(linkPattern);
-    if (matches) {
-      updateCount = matches.length;
-      // Replace with new link - need to use a function to preserve the matched text
-      updatedMarkdown = markdown.replace(linkPattern, (_match, linkText) => {
-        return `[${linkText}](${newLink})`;
+    // Try matching with ./ prefix first
+    const patternWithPrefix = createMarkdownLinkPattern(oldLinkWithPrefix);
+    const matchesWithPrefix = markdown.match(patternWithPrefix);
+    if (matchesWithPrefix) {
+      updateCount += matchesWithPrefix.length;
+      updatedMarkdown = updatedMarkdown.replace(patternWithPrefix, (_match, linkText) => {
+        return `[${linkText}](${oldLinkWithPrefix.startsWith('./') ? `${RELATIVE_PREFIX}${newLinkWithoutPrefix}` : newLinkWithoutPrefix})`;
       });
+    }
 
-      // Write updated content
+    // Also try matching without ./ prefix (common in markdown)
+    if (!oldLinkFromFile.startsWith('.')) {
+      const patternWithoutPrefix = createMarkdownLinkPattern(oldLinkWithoutPrefix);
+      const matchesWithoutPrefix = updatedMarkdown.match(patternWithoutPrefix);
+      if (matchesWithoutPrefix) {
+        updateCount += matchesWithoutPrefix.length;
+        updatedMarkdown = updatedMarkdown.replace(patternWithoutPrefix, (_match, linkText) => {
+          return `[${linkText}](${newLinkWithoutPrefix})`;
+        });
+      }
+    }
+
+    // Write updated content if any changes were made
+    if (updateCount > 0) {
       const updatedContent = serializeMarkdown(frontmatter, updatedMarkdown);
       writeFileSync(filePath, updatedContent, 'utf-8');
     }

@@ -232,4 +232,58 @@ Also [Local](./page2.md).`,
     const content = readFileSync(join(testDir, 'home.md'), 'utf-8');
     expect(content).toContain('./overview.md');
   });
+
+  test('updates links without ./ prefix', () => {
+    mkdirSync(join(testDir, 'development'));
+
+    // Link without ./ prefix (common in markdown)
+    writeFileSync(
+      join(testDir, 'README.md'),
+      `---
+title: README
+---
+
+See [I18n Guide](development/i18n-guidelines.md) for details.
+`,
+    );
+    writeFileSync(join(testDir, 'development', 'i18n-guidelines.md'), '# I18n');
+
+    const results = updateReferencesAfterRename(
+      testDir,
+      'development/i18n-guidelines.md',
+      'development/internationalization-guidelines.md',
+    );
+
+    expect(results.length).toBe(1);
+    expect(results[0].filePath).toBe('README.md');
+    expect(results[0].updatedCount).toBe(1);
+
+    const content = readFileSync(join(testDir, 'README.md'), 'utf-8');
+    expect(content).toContain('development/internationalization-guidelines.md');
+    expect(content).not.toContain('development/i18n-guidelines.md');
+  });
+
+  test('updates both prefixed and non-prefixed links in same file', () => {
+    mkdirSync(join(testDir, 'docs'));
+
+    writeFileSync(
+      join(testDir, 'index.md'),
+      `---
+title: Index
+---
+
+See [Guide](docs/guide.md) and also [Guide Again](./docs/guide.md).
+`,
+    );
+    writeFileSync(join(testDir, 'docs', 'guide.md'), '# Guide');
+
+    const results = updateReferencesAfterRename(testDir, 'docs/guide.md', 'docs/user-guide.md');
+
+    expect(results.length).toBe(1);
+    expect(results[0].updatedCount).toBe(2);
+
+    const content = readFileSync(join(testDir, 'index.md'), 'utf-8');
+    expect(content).toContain('docs/user-guide.md');
+    expect(content).not.toContain('docs/guide.md');
+  });
 });
