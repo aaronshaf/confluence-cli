@@ -423,17 +423,33 @@ async function createNewPage(
     let moveSucceeded = false;
     if (shouldUseMoveWorkaround && parentId) {
       console.log(chalk.gray(`  Moving page into folder...`));
-      try {
-        await client.movePage(createdPage.id, parentId, 'append');
-        console.log(chalk.green(`  Moved page to folder`));
-        moveSucceeded = true;
-      } catch (moveError) {
-        // If move fails, warn but don't fail the entire operation
+
+      // Retry move with delays - Confluence may need time after page creation
+      const maxRetries = 3;
+      const retryDelayMs = 1000;
+      let lastError: Error | undefined;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          await client.movePage(createdPage.id, parentId, 'append');
+          console.log(chalk.green(`  Moved page to folder`));
+          moveSucceeded = true;
+          break;
+        } catch (moveError) {
+          lastError = moveError instanceof Error ? moveError : new Error(String(moveError));
+          if (attempt < maxRetries) {
+            console.log(chalk.gray(`  Move attempt ${attempt} failed, retrying in ${retryDelayMs}ms...`));
+            await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+          }
+        }
+      }
+
+      if (!moveSucceeded && lastError) {
+        // If move fails after retries, warn but don't fail the entire operation
         // The page was created successfully, just not in the right location
         // Preserve intendedParentId in frontmatter so user can retry
-        const moveErrorMsg = moveError instanceof Error ? moveError.message : String(moveError);
         console.log(chalk.yellow(`  Warning: Could not move page to folder. Page created at space root.`));
-        console.log(chalk.gray(`  Move error: ${moveErrorMsg}`));
+        console.log(chalk.gray(`  Move error: ${lastError.message}`));
         console.log(chalk.yellow(`  The intended parent_id will be preserved for retry.`));
         console.log(chalk.yellow(`  Run "cn push ${relativePath}" again to retry the move.`));
       }
