@@ -457,6 +457,16 @@ async function createNewPage(
     console.log(chalk.gray('  Creating page on Confluence...'));
     const createdPage = await client.createPage(createRequest);
 
+    // Set editor property to v2 to enable the new editor
+    // This is needed because the V2 API with storage format defaults to legacy editor
+    // See: https://community.developer.atlassian.com/t/confluence-rest-api-v2-struggling-to-create-a-page-with-the-new-editor/75235
+    try {
+      await client.setEditorV2(createdPage.id);
+    } catch {
+      // Non-fatal: page was created but may use legacy editor
+      console.log(chalk.yellow('  Warning: Could not set editor to v2. Page may use legacy editor.'));
+    }
+
     // Build complete frontmatter from response
     const webui = createdPage._links?.webui;
     const newFrontmatter: PageFrontmatter = {

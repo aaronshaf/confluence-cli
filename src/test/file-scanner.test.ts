@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { detectPushCandidates, scanMarkdownFiles } from '../lib/file-scanner.js';
+import { detectPushCandidates, RESERVED_FILENAMES, scanMarkdownFiles } from '../lib/file-scanner.js';
 
 describe('file-scanner', () => {
   let testDir: string;
@@ -75,6 +75,51 @@ describe('file-scanner', () => {
       const files = scanMarkdownFiles(testDir);
 
       expect(files).toEqual(['alpha.md', 'beta.md', 'zebra.md']);
+    });
+
+    test('excludes reserved filenames (CLAUDE.md, AGENTS.md)', () => {
+      writeFileSync(join(testDir, 'CLAUDE.md'), '# Claude instructions');
+      writeFileSync(join(testDir, 'AGENTS.md'), '# Agent instructions');
+      writeFileSync(join(testDir, 'page.md'), '# Regular page');
+
+      const files = scanMarkdownFiles(testDir);
+
+      expect(files).toEqual(['page.md']);
+    });
+
+    test('excludes reserved filenames case-insensitively', () => {
+      // Use subdirectories to test different case variants
+      // (on case-insensitive filesystems like macOS, claude.md and Claude.md are the same file)
+      mkdirSync(join(testDir, 'lower'));
+      mkdirSync(join(testDir, 'upper'));
+      mkdirSync(join(testDir, 'mixed'));
+      writeFileSync(join(testDir, 'lower', 'claude.md'), '# Claude instructions');
+      writeFileSync(join(testDir, 'upper', 'CLAUDE.MD'), '# Claude instructions');
+      writeFileSync(join(testDir, 'mixed', 'Agents.md'), '# Agent instructions');
+      writeFileSync(join(testDir, 'page.md'), '# Regular page');
+
+      const files = scanMarkdownFiles(testDir);
+
+      // Only page.md should be included (case-insensitive matching for reserved names)
+      expect(files).toEqual(['page.md']);
+    });
+
+    test('excludes reserved filenames in subdirectories', () => {
+      mkdirSync(join(testDir, 'subdir'));
+      writeFileSync(join(testDir, 'subdir', 'CLAUDE.md'), '# Claude instructions');
+      writeFileSync(join(testDir, 'subdir', 'AGENTS.md'), '# Agent instructions');
+      writeFileSync(join(testDir, 'subdir', 'page.md'), '# Regular page');
+
+      const files = scanMarkdownFiles(testDir);
+
+      expect(files).toEqual(['subdir/page.md']);
+    });
+  });
+
+  describe('RESERVED_FILENAMES', () => {
+    test('includes claude.md and agents.md', () => {
+      expect(RESERVED_FILENAMES.has('claude.md')).toBe(true);
+      expect(RESERVED_FILENAMES.has('agents.md')).toBe(true);
     });
   });
 
@@ -252,6 +297,35 @@ Content here.`;
 
       expect(candidates).toHaveLength(1);
       expect(candidates[0].path).toBe('subfolder/nested.md');
+    });
+
+    test('excludes reserved filenames from push candidates', () => {
+      writeFileSync(
+        join(testDir, 'CLAUDE.md'),
+        `---
+title: Claude
+---
+Instructions`,
+      );
+      writeFileSync(
+        join(testDir, 'AGENTS.md'),
+        `---
+title: Agents
+---
+Instructions`,
+      );
+      writeFileSync(
+        join(testDir, 'page.md'),
+        `---
+title: Regular Page
+---
+Content`,
+      );
+
+      const candidates = detectPushCandidates(testDir);
+
+      expect(candidates).toHaveLength(1);
+      expect(candidates[0].path).toBe('page.md');
     });
   });
 });

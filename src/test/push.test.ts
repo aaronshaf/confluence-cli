@@ -302,4 +302,64 @@ describe('ConfluenceClient - Push Operations', () => {
       }
     });
   });
+
+  describe('Content Properties', () => {
+    test('sets content property on a page', async () => {
+      server.use(
+        http.post('*/wiki/api/v2/pages/page-123/properties', async ({ request }) => {
+          const body = (await request.json()) as any;
+          expect(body).toHaveProperty('key', 'editor');
+          expect(body).toHaveProperty('value', 'v2');
+          return HttpResponse.json({ key: 'editor', value: 'v2' }, { status: 200 });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+      await client.setContentProperty('page-123', 'editor', 'v2');
+      // No error means success
+    });
+
+    test('setEditorV2 sets editor property to v2', async () => {
+      server.use(
+        http.post('*/wiki/api/v2/pages/page-456/properties', async ({ request }) => {
+          const body = (await request.json()) as any;
+          expect(body).toHaveProperty('key', 'editor');
+          expect(body).toHaveProperty('value', 'v2');
+          return HttpResponse.json({ key: 'editor', value: 'v2' }, { status: 200 });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+      await client.setEditorV2('page-456');
+      // No error means success
+    });
+
+    test('handles 401 authentication error for content property', async () => {
+      server.use(
+        http.post('*/wiki/api/v2/pages/page-123/properties', () => {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+
+      expect(async () => {
+        await client.setContentProperty('page-123', 'editor', 'v2');
+      }).toThrow();
+    });
+
+    test('handles 403 permission error for content property', async () => {
+      server.use(
+        http.post('*/wiki/api/v2/pages/page-123/properties', () => {
+          return HttpResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+
+      expect(async () => {
+        await client.setContentProperty('page-123', 'editor', 'v2');
+      }).toThrow();
+    });
+  });
 });

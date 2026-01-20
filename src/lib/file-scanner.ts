@@ -23,6 +23,12 @@ const EXCLUDED_DIRS = new Set([
 ]);
 
 /**
+ * Reserved filenames that should not be synced (used by coding agents)
+ * Checked case-insensitively
+ */
+export const RESERVED_FILENAMES = new Set(['claude.md', 'agents.md']);
+
+/**
  * Scans a directory recursively for markdown files.
  * Excludes common build/dependency directories and hidden files.
  *
@@ -68,6 +74,10 @@ export function scanMarkdownFiles(directory: string): string[] {
       if (stat.isDirectory()) {
         scan(fullPath);
       } else if (stat.isFile() && entry.endsWith('.md')) {
+        // Skip reserved filenames (used by coding agents)
+        if (RESERVED_FILENAMES.has(entry.toLowerCase())) {
+          continue;
+        }
         // Return path relative to the root directory
         files.push(relative(directory, fullPath));
       }

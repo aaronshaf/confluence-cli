@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { RESERVED_FILENAMES } from '../file-scanner.js';
 import {
   ConfluenceClient,
   isFolder,
@@ -79,6 +80,9 @@ function assertPathWithinDirectory(baseDir: string, targetPath: string): void {
     throw new SyncError(`Path traversal detected: "${targetPath}" escapes base directory`);
   }
 }
+
+/** Check if page title would generate a reserved filename (CLAUDE.md, AGENTS.md) */
+const wouldGenerateReservedFilename = (title: string): boolean => RESERVED_FILENAMES.has(`${slugify(title)}.md`);
 
 /**
  * SyncEngine handles syncing Confluence spaces to local directories
@@ -425,6 +429,13 @@ export class SyncEngine {
           const page = remotePages.find((p) => p.id === change.pageId);
           if (!page) continue;
 
+          // Skip reserved filenames BEFORE generating path (avoids polluting existingPaths)
+          // Check early to avoid unnecessary API calls
+          if (wouldGenerateReservedFilename(page.title)) {
+            result.warnings.push(`Skipping page "${page.title}": would generate reserved filename`);
+            continue;
+          }
+
           // Get full page content
           const fullPage = await this.client.getPage(page.id, true);
 
@@ -498,6 +509,13 @@ export class SyncEngine {
         try {
           const page = remotePages.find((p) => p.id === change.pageId);
           if (!page) continue;
+
+          // Skip reserved filenames BEFORE generating path (avoids polluting existingPaths)
+          // Check early to avoid unnecessary API calls
+          if (wouldGenerateReservedFilename(page.title)) {
+            result.warnings.push(`Skipping page "${page.title}": would generate reserved filename`);
+            continue;
+          }
 
           // Get full page content
           const fullPage = await this.client.getPage(page.id, true);

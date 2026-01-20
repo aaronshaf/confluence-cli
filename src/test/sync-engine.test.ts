@@ -240,5 +240,77 @@ describe('SyncEngine', () => {
       expect(result.success).toBe(true);
       expect(result.changes.added).toHaveLength(1);
     });
+
+    test('skips pages with reserved filenames during sync', async () => {
+      // Set up mocks for pages - include a page titled "Claude" which would generate claude.md
+      server.use(
+        http.get('*/wiki/api/v2/spaces/:spaceId/pages', () => {
+          return HttpResponse.json({
+            results: [
+              createValidPage({
+                id: 'page-1',
+                title: 'Home',
+                spaceId: 'space-123',
+                body: '<p>Welcome!</p>',
+              }),
+              createValidPage({
+                id: 'page-2',
+                title: 'Claude',
+                spaceId: 'space-123',
+                parentId: 'page-1',
+                body: '<p>This should be skipped</p>',
+              }),
+              createValidPage({
+                id: 'page-3',
+                title: 'Agents',
+                spaceId: 'space-123',
+                parentId: 'page-1',
+                body: '<p>This should also be skipped</p>',
+              }),
+            ],
+          });
+        }),
+        http.get('*/wiki/api/v2/pages/:pageId', ({ params }) => {
+          const pageId = params.pageId as string;
+          const titles: Record<string, string> = {
+            'page-1': 'Home',
+            'page-2': 'Claude',
+            'page-3': 'Agents',
+          };
+          return HttpResponse.json(
+            createValidPage({
+              id: pageId,
+              title: titles[pageId] || 'Unknown',
+              spaceId: 'space-123',
+              parentId: pageId === 'page-1' ? undefined : 'page-1',
+              body: '<p>Content</p>',
+            }),
+          );
+        }),
+      );
+
+      // Set up space config
+      const spaceConfig: SpaceConfigWithState = {
+        spaceKey: 'TEST',
+        spaceId: 'space-123',
+        spaceName: 'Test Space',
+        pages: {},
+      };
+      writeSpaceConfig(testDir, spaceConfig);
+
+      const engine = new SyncEngine(testConfig);
+      const result = await engine.sync(testDir);
+
+      expect(result.success).toBe(true);
+      // 3 pages were added to diff, but 2 should be skipped
+      expect(result.changes.added).toHaveLength(3);
+      // Only README.md (home page) should exist, not claude.md or agents.md
+      expect(existsSync(join(testDir, 'README.md'))).toBe(true);
+      expect(existsSync(join(testDir, 'claude.md'))).toBe(false);
+      expect(existsSync(join(testDir, 'agents.md'))).toBe(false);
+      // Should have warnings about skipped pages (check for "reserved filename" in the message)
+      expect(result.warnings.some((w) => w.includes('reserved filename') && w.includes('Claude'))).toBe(true);
+      expect(result.warnings.some((w) => w.includes('reserved filename') && w.includes('Agents'))).toBe(true);
+    });
   });
 });

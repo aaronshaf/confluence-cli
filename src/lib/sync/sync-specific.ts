@@ -1,7 +1,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import type { ConfluenceClient, User } from '../confluence-client/index.js';
 import { SyncError } from '../errors.js';
+import { RESERVED_FILENAMES } from '../file-scanner.js';
 import { buildPageLookupMap, type MarkdownConverter } from '../markdown/index.js';
 import {
   readSpaceConfig,
@@ -43,6 +44,13 @@ function assertPathWithinDirectory(baseDir: string, targetPath: string): void {
   if (!resolvedTarget.startsWith(`${resolvedBase}/`) && resolvedTarget !== resolvedBase) {
     throw new SyncError(`Path traversal detected: "${targetPath}" escapes base directory`);
   }
+}
+
+/**
+ * Check if a path uses a reserved filename (used by coding agents)
+ */
+function isReservedPath(path: string): boolean {
+  return RESERVED_FILENAMES.has(basename(path).toLowerCase());
 }
 
 /**
@@ -141,6 +149,12 @@ export async function syncSpecificPages(
     for (const change of result.changes.modified) {
       currentChange++;
       progress?.onPageStart?.(currentChange, totalChanges, change.title, 'modified');
+
+      // Skip reserved filenames (used by coding agents)
+      if (change.localPath && isReservedPath(change.localPath)) {
+        result.warnings.push(`Skipping page "${change.title}": reserved filename ${basename(change.localPath)}`);
+        continue;
+      }
 
       try {
         const fullPage = await client.getPage(change.pageId, true);

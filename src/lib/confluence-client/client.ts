@@ -36,6 +36,12 @@ import {
  */
 const MAX_RETRIES = 5;
 const BASE_DELAY_MS = 1000;
+/** Shared retry schedule for rate-limited requests */
+const rateLimitRetrySchedule = Schedule.exponential(BASE_DELAY_MS).pipe(
+  Schedule.jittered,
+  Schedule.whileInput((error: unknown) => error instanceof RateLimitError),
+  Schedule.upTo(MAX_RETRIES * BASE_DELAY_MS * 32),
+);
 
 /**
  * Confluence API v2 client
@@ -44,7 +50,6 @@ const BASE_DELAY_MS = 1000;
 export class ConfluenceClient {
   private baseUrl: string;
   private authHeader: string;
-
   constructor(config: Config) {
     this.baseUrl = config.confluenceUrl;
     this.authHeader = `Basic ${Buffer.from(`${config.email}:${config.apiToken}`).toString('base64')}`;
@@ -103,19 +108,12 @@ export class ConfluenceClient {
       },
     });
 
-    // Retry schedule with exponential backoff and jitter for rate limits
-    const retrySchedule = Schedule.exponential(BASE_DELAY_MS).pipe(
-      Schedule.jittered,
-      Schedule.whileInput((error: unknown) => error instanceof RateLimitError),
-      Schedule.upTo(MAX_RETRIES * BASE_DELAY_MS * 32), // Max total delay
-    );
-
     return pipe(
       makeRequest,
       Effect.flatMap((data) =>
         Schema.decodeUnknown(schema)(data).pipe(Effect.mapError((e) => new ApiError(`Invalid response: ${e}`, 500))),
       ),
-      Effect.retry(retrySchedule),
+      Effect.retry(rateLimitRetrySchedule),
     );
   }
 
@@ -361,13 +359,6 @@ export class ConfluenceClient {
       },
     });
 
-    // Retry schedule with exponential backoff for rate limits only
-    const retrySchedule = Schedule.exponential(BASE_DELAY_MS).pipe(
-      Schedule.jittered,
-      Schedule.whileInput((error: unknown) => error instanceof RateLimitError),
-      Schedule.upTo(MAX_RETRIES * BASE_DELAY_MS * 32),
-    );
-
     return pipe(
       makeRequest,
       Effect.flatMap((data) =>
@@ -375,7 +366,7 @@ export class ConfluenceClient {
           Effect.mapError((e) => new ApiError(`Invalid response: ${e}`, 500)),
         ),
       ),
-      Effect.retry(retrySchedule),
+      Effect.retry(rateLimitRetrySchedule),
     );
   }
 
@@ -439,13 +430,6 @@ export class ConfluenceClient {
       },
     });
 
-    // Retry schedule with exponential backoff for rate limits only
-    const retrySchedule = Schedule.exponential(BASE_DELAY_MS).pipe(
-      Schedule.jittered,
-      Schedule.whileInput((error: unknown) => error instanceof RateLimitError),
-      Schedule.upTo(MAX_RETRIES * BASE_DELAY_MS * 32),
-    );
-
     return pipe(
       makeRequest,
       Effect.flatMap((data) =>
@@ -453,7 +437,7 @@ export class ConfluenceClient {
           Effect.mapError((e) => new ApiError(`Invalid response: ${e}`, 500)),
         ),
       ),
-      Effect.retry(retrySchedule),
+      Effect.retry(rateLimitRetrySchedule),
     );
   }
 
@@ -462,6 +446,59 @@ export class ConfluenceClient {
    */
   async createPage(request: CreatePageRequest): Promise<Page> {
     return Effect.runPromise(this.createPageEffect(request));
+  }
+
+  /** Set a content property on a page (Effect version) */
+  setContentPropertyEffect(
+    pageId: string,
+    key: string,
+    value: unknown,
+  ): Effect.Effect<void, ApiError | AuthError | NetworkError | RateLimitError> {
+    const baseUrl = this.baseUrl;
+    const authHeader = this.authHeader;
+    const url = `${baseUrl}/wiki/api/v2/pages/${pageId}/properties`;
+
+    const makeRequest = Effect.tryPromise({
+      try: async () => {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: authHeader,
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ key, value }),
+        });
+
+        if (response.status === 429) {
+          const retryAfter = response.headers.get('Retry-After');
+          throw new RateLimitError('Rate limited', retryAfter ? Number.parseInt(retryAfter, 10) : undefined);
+        }
+
+        if (response.status === 401) throw new AuthError('Authentication failed', 401);
+        if (response.status === 403) throw new AuthError('Permission denied', 403);
+        if (!response.ok)
+          throw new ApiError(`Failed to set content property: ${await response.text()}`, response.status);
+      },
+      catch: (error) => {
+        if (error instanceof RateLimitError || error instanceof AuthError || error instanceof ApiError) {
+          return error;
+        }
+        return new NetworkError(`Network error: ${error}`);
+      },
+    });
+
+    return pipe(makeRequest, Effect.retry(rateLimitRetrySchedule));
+  }
+
+  /** Set a content property on a page (async version) */
+  async setContentProperty(pageId: string, key: string, value: unknown): Promise<void> {
+    return Effect.runPromise(this.setContentPropertyEffect(pageId, key, value));
+  }
+
+  /** Set editor version to v2 for a page (enables new editor) */
+  async setEditorV2(pageId: string): Promise<void> {
+    return this.setContentProperty(pageId, 'editor', 'v2');
   }
 
   /**
@@ -562,13 +599,6 @@ export class ConfluenceClient {
       },
     });
 
-    // Retry schedule for rate limits
-    const retrySchedule = Schedule.exponential(BASE_DELAY_MS).pipe(
-      Schedule.jittered,
-      Schedule.whileInput((error: unknown) => error instanceof RateLimitError),
-      Schedule.upTo(MAX_RETRIES * BASE_DELAY_MS * 32),
-    );
-
     return pipe(
       makeRequest,
       Effect.flatMap((data) =>
@@ -576,7 +606,7 @@ export class ConfluenceClient {
           Effect.mapError((e) => new ApiError(`Invalid user response: ${e}`, 500)),
         ),
       ),
-      Effect.retry(retrySchedule),
+      Effect.retry(rateLimitRetrySchedule),
     );
   }
 
