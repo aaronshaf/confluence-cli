@@ -6,7 +6,7 @@ import {
   relativePathToConfluenceLink,
   type PageLookupMap,
 } from '../lib/markdown/link-converter.js';
-import type { SpaceConfigWithState } from '../lib/space-config.js';
+import { updatePageSyncInfo, type SpaceConfigWithState } from '../lib/space-config.js';
 
 describe('buildPageLookupMap', () => {
   test('builds lookup maps from sync state', () => {
@@ -351,5 +351,83 @@ describe('relativePathToConfluenceLink', () => {
     expect(result).not.toBeNull();
     expect(result?.title).toBe('Deep Page');
     expect(result?.pageId).toBe('page-deep');
+  });
+});
+
+describe('batch config propagation', () => {
+  test('in-memory config updates allow subsequent link resolution', () => {
+    // This test verifies the fix for batch push link resolution
+    // When pushing multiple files, the first file's page info should be available
+    // for link resolution in subsequent files
+
+    // Start with a config that has no pages (simulating start of batch push)
+    let config: SpaceConfigWithState = {
+      spaceKey: 'TEST',
+      spaceId: 'space-123',
+      spaceName: 'Test Space',
+      pages: {},
+    };
+
+    // At this point, links to page-a.md cannot be resolved
+    let lookupMap = buildPageLookupMap(config);
+    let result = relativePathToConfluenceLink('./page-a.md', 'page-b.md', '/test/space', lookupMap);
+    expect(result).toBeNull();
+
+    // Simulate pushing page-a.md - this updates the in-memory config
+    config = updatePageSyncInfo(config, {
+      pageId: 'page-a-id',
+      version: 1,
+      localPath: 'page-a.md',
+      title: 'Page A',
+    });
+
+    // Now rebuild the lookup map with the updated config
+    // This is what happens during batch push - the updated config is passed to the next file
+    lookupMap = buildPageLookupMap(config);
+
+    // Now links to page-a.md CAN be resolved
+    result = relativePathToConfluenceLink('./page-a.md', 'page-b.md', '/test/space', lookupMap);
+    expect(result).not.toBeNull();
+    expect(result?.pageId).toBe('page-a-id');
+    expect(result?.title).toBe('Page A');
+  });
+
+  test('multiple pages pushed in sequence are all resolvable', () => {
+    // Simulates pushing three files where each links to the previous
+    let config: SpaceConfigWithState = {
+      spaceKey: 'TEST',
+      spaceId: 'space-123',
+      spaceName: 'Test Space',
+      pages: {},
+    };
+
+    // Push page-a.md
+    config = updatePageSyncInfo(config, {
+      pageId: 'page-a-id',
+      version: 1,
+      localPath: 'page-a.md',
+      title: 'Page A',
+    });
+
+    // Push page-b.md (can now link to page-a)
+    let lookupMap = buildPageLookupMap(config);
+    let result = relativePathToConfluenceLink('./page-a.md', 'page-b.md', '/test/space', lookupMap);
+    expect(result?.pageId).toBe('page-a-id');
+
+    config = updatePageSyncInfo(config, {
+      pageId: 'page-b-id',
+      version: 1,
+      localPath: 'page-b.md',
+      title: 'Page B',
+    });
+
+    // Push page-c.md (can now link to both page-a and page-b)
+    lookupMap = buildPageLookupMap(config);
+
+    result = relativePathToConfluenceLink('./page-a.md', 'page-c.md', '/test/space', lookupMap);
+    expect(result?.pageId).toBe('page-a-id');
+
+    result = relativePathToConfluenceLink('./page-b.md', 'page-c.md', '/test/space', lookupMap);
+    expect(result?.pageId).toBe('page-b-id');
   });
 });

@@ -4,9 +4,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { ConfigManager } from '../../lib/config.js';
 import { ConfluenceClient, type CreatePageRequest, type UpdatePageRequest } from '../../lib/confluence-client/index.js';
-import { EXIT_CODES, PageNotFoundError, VersionConflictError } from '../../lib/errors.js';
+import { EXIT_CODES, PageNotFoundError } from '../../lib/errors.js';
 import { sortByDependencies } from '../../lib/dependency-sorter.js';
 import { detectPushCandidates, type PushCandidate } from '../../lib/file-scanner.js';
+import { handlePushError, PushError } from './push-errors.js';
 import {
   buildPageLookupMap,
   extractH1Title,
@@ -30,6 +31,19 @@ export interface PushCommandOptions {
   file?: string;
   force?: boolean;
   dryRun?: boolean;
+}
+
+/**
+ * Result of pushing a single file to Confluence
+ */
+interface PushResult {
+  success: boolean;
+  updatedConfig: SpaceConfigWithState;
+  pageInfo?: {
+    pageId: string;
+    title: string;
+    localPath: string;
+  };
 }
 
 // Confluence Cloud has a ~65k character limit for page content in Storage Format
@@ -100,7 +114,7 @@ async function pushSingleFile(
   directory: string,
   file: string,
   options: PushCommandOptions,
-): Promise<void> {
+): Promise<PushResult> {
   // Resolve and validate file path
   const filePath = resolve(directory, file);
   if (!existsSync(filePath)) {
@@ -134,7 +148,7 @@ async function pushSingleFile(
 
   // Check if this is a new page (no page_id) or existing page
   if (!frontmatter.page_id) {
-    await createNewPage(
+    return createNewPage(
       client,
       config,
       spaceConfig,
@@ -147,7 +161,7 @@ async function pushSingleFile(
       title,
     );
   } else {
-    await updateExistingPage(
+    return updateExistingPage(
       client,
       config,
       spaceConfig,
@@ -213,10 +227,13 @@ async function pushBatch(
   }
 
   // Process each candidate with y/n prompt
+  // Maintain in-memory config state throughout batch so link resolution works
+  let currentConfig = spaceConfig;
   let pushed = 0;
   let skipped = 0;
   let failed = 0;
   const failedFiles: string[] = [];
+  const pushedPages: Array<{ pageId: string; title: string; localPath: string }> = [];
 
   for (const candidate of sortedCandidates) {
     const typeLabel = candidate.type === 'new' ? 'create' : 'update';
@@ -231,11 +248,20 @@ async function pushBatch(
     }
 
     try {
-      await pushSingleFile(client, config, spaceConfig, directory, candidate.path, {
+      // Pass currentConfig so link resolution has access to previously-pushed pages
+      const result = await pushSingleFile(client, config, currentConfig, directory, candidate.path, {
         ...options,
         file: candidate.path,
       });
+
+      // Update in-memory config for next iteration
+      currentConfig = result.updatedConfig;
       pushed++;
+
+      // Track pushed page info for summary
+      if (result.pageInfo) {
+        pushedPages.push(result.pageInfo);
+      }
     } catch (error) {
       // Don't exit on individual failures in batch mode
       // PushError/FolderHierarchyError already printed their message, other errors need printing
@@ -261,44 +287,15 @@ async function pushBatch(
       console.log(chalk.gray(`  ${file}`));
     }
   }
-}
 
-/**
- * Error thrown during push operations
- */
-class PushError extends Error {
-  constructor(
-    message: string,
-    public readonly exitCode: number,
-  ) {
-    super(message);
-    this.name = 'PushError';
+  // Show pushed pages summary
+  if (pushedPages.length > 0) {
+    console.log('');
+    console.log(chalk.bold('Pushed pages:'));
+    for (const page of pushedPages) {
+      console.log(chalk.gray(`  ${page.title} (${page.pageId}) - ${page.localPath}`));
+    }
   }
-}
-
-/**
- * Handle push errors - formats error and throws PushError
- */
-function handlePushError(error: unknown, filePath: string): never {
-  if (error instanceof PageNotFoundError) {
-    console.error('');
-    console.error(chalk.red(`Page not found on Confluence (ID: ${error.pageId}).`));
-    console.log(chalk.gray('The page may have been deleted.'));
-    throw new PushError(`Page not found: ${error.pageId}`, EXIT_CODES.PAGE_NOT_FOUND);
-  }
-
-  if (error instanceof VersionConflictError) {
-    console.error('');
-    console.error(chalk.red('Version conflict: remote version has changed.'));
-    console.log(chalk.gray(`Run "cn pull --page ${filePath}" to get the latest version.`));
-    throw new PushError('Version conflict', EXIT_CODES.VERSION_CONFLICT);
-  }
-
-  console.error('');
-  console.error(chalk.red('Push failed'));
-  const message = error instanceof Error ? error.message : 'Unknown error';
-  console.error(chalk.red(message));
-  throw new PushError(message, EXIT_CODES.GENERAL_ERROR);
 }
 
 /**
@@ -315,22 +312,20 @@ async function createNewPage(
   frontmatter: Partial<PageFrontmatter>,
   content: string,
   title: string,
-): Promise<void> {
+): Promise<PushResult> {
   console.log(chalk.bold(`Creating: ${title}`));
   console.log(chalk.cyan('  (New page - no page_id in frontmatter)'));
 
   // Convert markdown to HTML with link conversion (ADR-0022)
-  // Re-read config to get the latest sync state (important for batch pushes where
-  // earlier files may have been pushed and updated the sync state)
+  // Uses the passed-in spaceConfig which is maintained in-memory during batch pushes
   console.log(chalk.gray('  Converting markdown to HTML...'));
   const converter = new HtmlConverter();
-  const freshConfig = readSpaceConfig(directory) || spaceConfig;
-  const pageLookupMap = buildPageLookupMap(freshConfig);
+  const pageLookupMap = buildPageLookupMap(spaceConfig);
   const { html, warnings } = converter.convert(
     content,
     directory,
     relativePath.replace(/^\.\//, ''),
-    freshConfig.spaceKey,
+    spaceConfig.spaceKey,
     pageLookupMap,
   );
 
@@ -404,7 +399,15 @@ async function createNewPage(
     console.log(chalk.gray(`  Content size: ${html.length} characters`));
     console.log('');
     console.log(chalk.blue('No changes were made (dry run mode)'));
-    return;
+    return {
+      success: true,
+      updatedConfig: currentConfig,
+      pageInfo: {
+        pageId: '[dry-run]',
+        title,
+        localPath: relativePath,
+      },
+    };
   }
 
   try {
@@ -456,21 +459,16 @@ async function createNewPage(
     );
 
     // Update .confluence.json sync state
-    let updatedSpaceConfig = readSpaceConfig(directory);
-    if (updatedSpaceConfig) {
-      // First, merge in any folder updates from ensureFolderHierarchy
-      if (currentConfig.folders) {
-        updatedSpaceConfig = { ...updatedSpaceConfig, folders: currentConfig.folders };
-      }
-      updatedSpaceConfig = updatePageSyncInfo(updatedSpaceConfig, {
-        pageId: createdPage.id,
-        version: createdPage.version?.number || 1,
-        lastModified: createdPage.version?.createdAt,
-        localPath: finalLocalPath,
-        title: createdPage.title,
-      });
-      writeSpaceConfig(directory, updatedSpaceConfig);
-    }
+    // Start with currentConfig (which may have folder updates from ensureFolderHierarchy)
+    // and add the new page's sync info
+    const updatedSpaceConfig = updatePageSyncInfo(currentConfig, {
+      pageId: createdPage.id,
+      version: createdPage.version?.number || 1,
+      lastModified: createdPage.version?.createdAt,
+      localPath: finalLocalPath,
+      title: createdPage.title,
+    });
+    writeSpaceConfig(directory, updatedSpaceConfig);
 
     // Success!
     console.log('');
@@ -479,6 +477,16 @@ async function createNewPage(
     if (webui) {
       console.log(chalk.gray(`  ${config.confluenceUrl}/wiki${webui}`));
     }
+
+    return {
+      success: true,
+      updatedConfig: updatedSpaceConfig,
+      pageInfo: {
+        pageId: createdPage.id,
+        title: createdPage.title,
+        localPath: finalLocalPath,
+      },
+    };
   } catch (error) {
     handlePushError(error, relativePath);
   }
@@ -498,7 +506,7 @@ async function updateExistingPage(
   frontmatter: Partial<PageFrontmatter>,
   content: string,
   title: string,
-): Promise<void> {
+): Promise<PushResult> {
   // Verify page_id exists (should be guaranteed by caller)
   if (!frontmatter.page_id) {
     throw new Error('updateExistingPage called without page_id');
@@ -536,17 +544,15 @@ async function updateExistingPage(
     }
 
     // Convert markdown to HTML with link conversion (ADR-0022)
-    // Re-read config to get the latest sync state (important for batch pushes where
-    // earlier files may have been pushed and updated the sync state)
+    // Uses the passed-in spaceConfig which is maintained in-memory during batch pushes
     console.log(chalk.gray('  Converting markdown to HTML...'));
     const converter = new HtmlConverter();
-    const freshConfig = readSpaceConfig(directory) || spaceConfig;
-    const pageLookupMap = buildPageLookupMap(freshConfig);
+    const pageLookupMap = buildPageLookupMap(spaceConfig);
     const { html, warnings } = converter.convert(
       content,
       directory,
       relativePath.replace(/^\.\//, ''),
-      freshConfig.spaceKey,
+      spaceConfig.spaceKey,
       pageLookupMap,
     );
 
@@ -597,7 +603,15 @@ async function updateExistingPage(
       console.log(chalk.gray(`  Content size: ${html.length} characters`));
       console.log('');
       console.log(chalk.blue('No changes were made (dry run mode)'));
-      return;
+      return {
+        success: true,
+        updatedConfig: spaceConfig,
+        pageInfo: {
+          pageId,
+          title,
+          localPath: relativePath,
+        },
+      };
     }
 
     // Push to Confluence
@@ -629,17 +643,15 @@ async function updateExistingPage(
     );
 
     // Update .confluence.json sync state
-    let updatedSpaceConfig = readSpaceConfig(directory);
-    if (updatedSpaceConfig) {
-      updatedSpaceConfig = updatePageSyncInfo(updatedSpaceConfig, {
-        pageId,
-        version: updatedPage.version?.number || newVersion,
-        lastModified: updatedPage.version?.createdAt,
-        localPath: finalLocalPath,
-        title: updatedPage.title,
-      });
-      writeSpaceConfig(directory, updatedSpaceConfig);
-    }
+    // Start with the passed-in spaceConfig and update with the pushed page's info
+    const updatedSpaceConfig = updatePageSyncInfo(spaceConfig, {
+      pageId,
+      version: updatedPage.version?.number || newVersion,
+      lastModified: updatedPage.version?.createdAt,
+      localPath: finalLocalPath,
+      title: updatedPage.title,
+    });
+    writeSpaceConfig(directory, updatedSpaceConfig);
 
     // Success!
     console.log('');
@@ -652,6 +664,16 @@ async function updateExistingPage(
     if (webui) {
       console.log(chalk.gray(`  ${config.confluenceUrl}/wiki${webui}`));
     }
+
+    return {
+      success: true,
+      updatedConfig: updatedSpaceConfig,
+      pageInfo: {
+        pageId,
+        title: updatedPage.title,
+        localPath: finalLocalPath,
+      },
+    };
   } catch (error) {
     handlePushError(error, relativePath);
   }
