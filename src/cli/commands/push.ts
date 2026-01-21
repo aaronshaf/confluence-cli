@@ -9,7 +9,7 @@ import { sortByDependencies } from '../../lib/dependency-sorter.js';
 import { detectPushCandidates, type PushCandidate } from '../../lib/file-scanner.js';
 import { handlePushError, PushError } from './push-errors.js';
 import {
-  buildPageLookupMap,
+  buildPageLookupMapFromCache,
   extractH1Title,
   HtmlConverter,
   parseMarkdown,
@@ -17,6 +17,7 @@ import {
   stripH1Title,
   type PageFrontmatter,
 } from '../../lib/markdown/index.js';
+import { buildPageStateFromFiles } from '../../lib/page-state.js';
 import {
   hasSpaceConfig,
   readSpaceConfig,
@@ -25,7 +26,7 @@ import {
   type SpaceConfigWithState,
 } from '../../lib/space-config.js';
 import { handleFileRename } from './file-rename.js';
-import { ensureFolderHierarchy, FolderHierarchyError } from './folder-hierarchy.js';
+import { determineExpectedParent, ensureFolderHierarchy, FolderHierarchyError } from './folder-hierarchy.js';
 
 export interface PushCommandOptions {
   file?: string;
@@ -316,11 +317,12 @@ async function createNewPage(
   console.log(chalk.bold(`Creating: ${title}`));
   console.log(chalk.cyan('  (New page - no page_id in frontmatter)'));
 
-  // Convert markdown to HTML with link conversion (ADR-0022)
+  // Convert markdown to HTML with link conversion (ADR-0022, ADR-0024)
   // Uses the passed-in spaceConfig which is maintained in-memory during batch pushes
   console.log(chalk.gray('  Converting markdown to HTML...'));
   const converter = new HtmlConverter();
-  const pageLookupMap = buildPageLookupMap(spaceConfig);
+  const pageState = buildPageStateFromFiles(directory, spaceConfig.pages);
+  const pageLookupMap = buildPageLookupMapFromCache(pageState);
   const { html, warnings } = converter.convert(
     content,
     directory,
@@ -337,11 +339,12 @@ async function createNewPage(
     throw new PushError(`Content too large: ${html.length} characters`, EXIT_CODES.INVALID_ARGUMENTS);
   }
 
-  // Show conversion warnings
-  if (warnings.length > 0) {
+  // Show conversion warnings (includes page state build warnings)
+  const allWarnings = [...pageState.warnings, ...warnings];
+  if (allWarnings.length > 0) {
     console.log('');
     console.log(chalk.yellow('Conversion warnings:'));
-    for (const warning of warnings) {
+    for (const warning of allWarnings) {
       console.log(chalk.yellow(`  ! ${warning}`));
     }
     console.log('');
@@ -386,27 +389,17 @@ async function createNewPage(
     },
   };
 
-  // Dry run mode - show what would be done without actually creating
+  // Dry run mode
   if (options.dryRun) {
-    console.log('');
-    console.log(chalk.blue('--- DRY RUN MODE ---'));
-    console.log(chalk.gray('Would create new page:'));
-    console.log(chalk.gray(`  Title: ${title}`));
-    console.log(chalk.gray(`  Space: ${currentConfig.spaceKey}`));
-    if (createRequest.parentId) {
-      console.log(chalk.gray(`  Parent ID: ${createRequest.parentId}`));
-    }
-    console.log(chalk.gray(`  Content size: ${html.length} characters`));
-    console.log('');
-    console.log(chalk.blue('No changes were made (dry run mode)'));
+    console.log(chalk.blue('\n--- DRY RUN MODE ---'));
+    console.log(chalk.gray(`Would create: ${title} in ${currentConfig.spaceKey}`));
+    if (createRequest.parentId) console.log(chalk.gray(`  Parent ID: ${createRequest.parentId}`));
+    console.log(chalk.gray(`  Content: ${html.length} chars`));
+    console.log(chalk.blue('No changes were made (dry run mode)\n'));
     return {
       success: true,
       updatedConfig: currentConfig,
-      pageInfo: {
-        pageId: '[dry-run]',
-        title,
-        localPath: relativePath,
-      },
+      pageInfo: { pageId: '[dry-run]', title, localPath: relativePath },
     };
   }
 
@@ -461,12 +454,10 @@ async function createNewPage(
     // Update .confluence.json sync state
     // Start with currentConfig (which may have folder updates from ensureFolderHierarchy)
     // and add the new page's sync info
+    // Per ADR-0024: Only store pageId -> localPath mapping
     const updatedSpaceConfig = updatePageSyncInfo(currentConfig, {
       pageId: createdPage.id,
-      version: createdPage.version?.number || 1,
-      lastModified: createdPage.version?.createdAt,
       localPath: finalLocalPath,
-      title: createdPage.title,
     });
     writeSpaceConfig(directory, updatedSpaceConfig);
 
@@ -543,16 +534,52 @@ async function updateExistingPage(
       console.log(chalk.yellow('  The remote title will be updated to match local.'));
     }
 
-    // Convert markdown to HTML with link conversion (ADR-0022)
-    // Uses the passed-in spaceConfig which is maintained in-memory during batch pushes
+    // Determine expected parent from current folder structure
+    const { parentId: expectedParentId, updatedConfig: configAfterFolders } = await determineExpectedParent(
+      client,
+      spaceConfig,
+      directory,
+      relativePath,
+      options.dryRun,
+    );
+    const currentConfig = configAfterFolders;
+
+    // Get current parent from remote page
+    const currentParentId = remotePage.parentId ?? undefined;
+
+    // Track actual parent ID (may differ from expected if move fails)
+    let actualParentId = currentParentId;
+    const needsMove = expectedParentId !== currentParentId;
+
+    if (needsMove) {
+      console.log(chalk.yellow(`  Parent changed: page will be moved to new location`));
+      if (!options.dryRun) {
+        if (expectedParentId) {
+          try {
+            await client.movePage(pageId, expectedParentId, 'append');
+            actualParentId = expectedParentId;
+            console.log(chalk.green(`  Moved page under parent ID: ${expectedParentId}`));
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            console.log(chalk.yellow(`  Warning: Could not move page: ${message}`));
+          }
+        } else {
+          console.log(chalk.yellow(`  Note: Cannot move to root level via API - page stays in current location`));
+        }
+      }
+    }
+
+    // Convert markdown to HTML with link conversion (ADR-0022, ADR-0024)
+    // Uses currentConfig which is maintained in-memory during batch pushes
     console.log(chalk.gray('  Converting markdown to HTML...'));
     const converter = new HtmlConverter();
-    const pageLookupMap = buildPageLookupMap(spaceConfig);
+    const pageState = buildPageStateFromFiles(directory, currentConfig.pages);
+    const pageLookupMap = buildPageLookupMapFromCache(pageState);
     const { html, warnings } = converter.convert(
       content,
       directory,
       relativePath.replace(/^\.\//, ''),
-      spaceConfig.spaceKey,
+      currentConfig.spaceKey,
       pageLookupMap,
     );
 
@@ -564,11 +591,12 @@ async function updateExistingPage(
       throw new PushError(`Content too large: ${html.length} characters`, EXIT_CODES.INVALID_ARGUMENTS);
     }
 
-    // Show conversion warnings
-    if (warnings.length > 0) {
+    // Show conversion warnings (includes page state build warnings)
+    const allWarnings = [...pageState.warnings, ...warnings];
+    if (allWarnings.length > 0) {
       console.log('');
       console.log(chalk.yellow('Conversion warnings:'));
-      for (const warning of warnings) {
+      for (const warning of allWarnings) {
         console.log(chalk.yellow(`  ! ${warning}`));
       }
       console.log('');
@@ -589,29 +617,15 @@ async function updateExistingPage(
       },
     };
 
-    // Dry run mode - show what would be done without actually updating
+    // Dry run mode
     if (options.dryRun) {
-      console.log('');
-      console.log(chalk.blue('--- DRY RUN MODE ---'));
-      console.log(chalk.gray('Would update page:'));
-      console.log(chalk.gray(`  Page ID: ${pageId}`));
-      console.log(chalk.gray(`  Title: ${title}`));
-      console.log(chalk.gray(`  Version: ${localVersion} → ${newVersion}`));
-      if (options.force) {
-        console.log(chalk.yellow('  Force mode: Would overwrite remote changes'));
-      }
-      console.log(chalk.gray(`  Content size: ${html.length} characters`));
-      console.log('');
-      console.log(chalk.blue('No changes were made (dry run mode)'));
-      return {
-        success: true,
-        updatedConfig: spaceConfig,
-        pageInfo: {
-          pageId,
-          title,
-          localPath: relativePath,
-        },
-      };
+      console.log(chalk.blue('\n--- DRY RUN MODE ---'));
+      console.log(chalk.gray(`Would update: ${title} (${pageId}), v${localVersion} → v${newVersion}`));
+      if (options.force) console.log(chalk.yellow('  Force mode: Would overwrite remote changes'));
+      if (needsMove) console.log(chalk.blue(`  Would move to parent: ${expectedParentId ?? 'root'}`));
+      console.log(chalk.gray(`  Content: ${html.length} chars`));
+      console.log(chalk.blue('No changes were made (dry run mode)\n'));
+      return { success: true, updatedConfig: currentConfig, pageInfo: { pageId, title, localPath: relativePath } };
     }
 
     // Push to Confluence
@@ -628,6 +642,7 @@ async function updateExistingPage(
       version: updatedPage.version?.number || newVersion,
       updated_at: updatedPage.version?.createdAt,
       last_modifier_id: updatedPage.version?.authorId,
+      parent_id: actualParentId,
       url: webui ? `${config.confluenceUrl}/wiki${webui}` : frontmatter.url,
       synced_at: new Date().toISOString(),
     };
@@ -643,13 +658,11 @@ async function updateExistingPage(
     );
 
     // Update .confluence.json sync state
-    // Start with the passed-in spaceConfig and update with the pushed page's info
-    const updatedSpaceConfig = updatePageSyncInfo(spaceConfig, {
+    // Start with currentConfig (includes folder updates from determineExpectedParent)
+    // Per ADR-0024: Only store pageId -> localPath mapping
+    const updatedSpaceConfig = updatePageSyncInfo(currentConfig, {
       pageId,
-      version: updatedPage.version?.number || newVersion,
-      lastModified: updatedPage.version?.createdAt,
       localPath: finalLocalPath,
-      title: updatedPage.title,
     });
     writeSpaceConfig(directory, updatedSpaceConfig);
 

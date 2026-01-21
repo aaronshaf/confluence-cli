@@ -11,7 +11,13 @@ import {
 } from '../confluence-client/index.js';
 import type { Config } from '../config.js';
 import { SyncError } from '../errors.js';
-import { buildPageLookupMap, MarkdownConverter, slugify, updateReferencesAfterRename } from '../markdown/index.js';
+import {
+  buildPageLookupMapFromCache,
+  MarkdownConverter,
+  slugify,
+  updateReferencesAfterRename,
+} from '../markdown/index.js';
+import { buildPageStateFromFiles, type PageStateCache } from '../page-state.js';
 import {
   createSpaceConfig,
   readSpaceConfig,
@@ -20,7 +26,6 @@ import {
   updatePageSyncInfo,
   writeSpaceConfig,
   type FolderSyncInfo,
-  type PageSyncInfo,
   type SpaceConfigWithState,
 } from '../space-config.js';
 import { assertPathWithinDirectory, generateFolderPath, wouldGenerateReservedFilename } from './folder-path.js';
@@ -141,24 +146,33 @@ export class SyncEngine {
 
   /**
    * Compute the diff between remote and local state
+   * Per ADR-0024: Uses PageStateCache for version comparison (frontmatter as source of truth)
+   * @param remotePages - Pages from Confluence API
+   * @param localConfig - Local space configuration with page mappings
+   * @param pageState - Optional PageStateCache with version info from frontmatter
    * @param forcePageIds - Page IDs to force resync regardless of version
    */
-  computeDiff(remotePages: Page[], localConfig: SpaceConfigWithState | null, forcePageIds?: Set<string>): SyncDiff {
+  computeDiff(
+    remotePages: Page[],
+    localConfig: SpaceConfigWithState | null,
+    pageState?: PageStateCache,
+    forcePageIds?: Set<string>,
+  ): SyncDiff {
     const diff: SyncDiff = {
       added: [],
       modified: [],
       deleted: [],
     };
 
-    const localPages = localConfig?.pages || {};
+    const localPageMappings = localConfig?.pages || {};
     const remotePageIds = new Set(remotePages.map((p) => p.id));
 
     // Find added and modified pages
     for (const page of remotePages) {
-      const localPage = localPages[page.id];
+      const localPath = localPageMappings[page.id];
       const isForced = forcePageIds?.has(page.id);
 
-      if (!localPage) {
+      if (!localPath) {
         diff.added.push({
           type: 'added',
           pageId: page.id,
@@ -166,26 +180,30 @@ export class SyncEngine {
         });
       } else {
         const remoteVersion = page.version?.number || 0;
+        // Get local version from PageStateCache (read from frontmatter)
+        const localPageInfo = pageState?.pages.get(page.id);
+        const localVersion = localPageInfo?.version || 0;
+
         // Include in modified if version changed OR if page is in forcePageIds
-        if (remoteVersion > localPage.version || isForced) {
+        if (remoteVersion > localVersion || isForced) {
           diff.modified.push({
             type: 'modified',
             pageId: page.id,
             title: page.title,
-            localPath: localPage.localPath,
+            localPath,
           });
         }
       }
     }
 
     // Find deleted pages
-    for (const [pageId, pageInfo] of Object.entries(localPages)) {
+    for (const [pageId, localPath] of Object.entries(localPageMappings)) {
       if (!remotePageIds.has(pageId)) {
         diff.deleted.push({
           type: 'deleted',
           pageId,
-          title: pageInfo.localPath.split('/').pop()?.replace('.md', '') || pageId,
-          localPath: pageInfo.localPath,
+          title: localPath.split('/').pop()?.replace('.md', '') || pageId,
+          localPath,
         });
       }
     }
@@ -349,14 +367,21 @@ export class SyncEngine {
         writeSpaceConfig(directory, config);
       }
 
+      // Build PageStateCache for version comparison (ADR-0024)
+      // This reads frontmatter from all tracked files
+      const pageStateBuildResult = buildPageStateFromFiles(directory, config.pages);
+      const pageState = pageStateBuildResult;
+      // Add warnings from page state building (e.g., missing or malformed files)
+      result.warnings.push(...pageStateBuildResult.warnings);
+
       // Resolve forcePages to page IDs (can be page IDs or local paths)
       let forcePageIds: Set<string> | undefined;
       if (options.forcePages && options.forcePages.length > 0) {
         forcePageIds = new Set<string>();
-        // Build reverse lookup from localPath to pageId
+        // Build reverse lookup from localPath to pageId (pages is now Record<string, string>)
         const pathToPageId = new Map<string, string>();
-        for (const [pageId, pageInfo] of Object.entries(config.pages)) {
-          pathToPageId.set(pageInfo.localPath, pageId);
+        for (const [pageId, localPath] of Object.entries(config.pages)) {
+          pathToPageId.set(localPath, pageId);
         }
 
         for (const pageRef of options.forcePages) {
@@ -384,14 +409,14 @@ export class SyncEngine {
         }
       }
 
-      // Compute diff
+      // Compute diff (pass pageState for version comparison from frontmatter)
       const diff = options.force
         ? {
             added: remotePages.map((p) => ({ type: 'added' as const, pageId: p.id, title: p.title })),
             modified: [],
             deleted: [],
           }
-        : this.computeDiff(remotePages, config, forcePageIds);
+        : this.computeDiff(remotePages, config, pageState, forcePageIds);
 
       result.changes = diff;
       progress?.onDiffComplete?.(diff.added.length, diff.modified.length, diff.deleted.length);
@@ -401,15 +426,16 @@ export class SyncEngine {
         return result;
       }
 
-      // Track existing paths for conflict resolution
+      // Track existing paths for conflict resolution (pages is now Record<string, string>)
       const existingPaths = new Set<string>();
-      for (const pageInfo of Object.values(config.pages)) {
-        existingPaths.add(pageInfo.localPath);
+      for (const localPath of Object.values(config.pages)) {
+        existingPaths.add(localPath);
       }
 
       // Build page lookup map for link conversion (ADR-0022)
+      // Reuse the already-built pageState to avoid duplicate file I/O
       // Enable duplicate title warnings during sync
-      const pageLookupMap = buildPageLookupMap(config, true);
+      const pageLookupMap = buildPageLookupMapFromCache(pageState, true);
 
       // Calculate total changes for progress
       const totalChanges = diff.added.length + diff.modified.length + diff.deleted.length;
@@ -477,14 +503,9 @@ export class SyncEngine {
           writeFileSync(fullPath, markdown, 'utf-8');
 
           // Update sync state and save immediately (for resume support)
-          const syncInfo: PageSyncInfo = {
-            pageId: page.id,
-            version: fullPage.version?.number || 1,
-            lastModified: fullPage.version?.createdAt,
-            localPath,
-            title: page.title, // Store title for link conversion (ADR-0022)
-          };
-          config = updatePageSyncInfo(config, syncInfo);
+          // Per ADR-0024: Only store pageId -> localPath mapping
+          // Version, title, timestamps are in frontmatter
+          config = updatePageSyncInfo(config, { pageId: page.id, localPath });
           writeSpaceConfig(directory, config);
           progress?.onPageComplete?.(currentChange, totalChanges, change.title, localPath);
         } catch (error) {
@@ -587,14 +608,9 @@ export class SyncEngine {
           writeFileSync(fullPath, markdown, 'utf-8');
 
           // Update sync state and save immediately (for resume support)
-          const syncInfo: PageSyncInfo = {
-            pageId: page.id,
-            version: fullPage.version?.number || 1,
-            lastModified: fullPage.version?.createdAt,
-            localPath: newPath,
-            title: page.title, // Store title for link conversion (ADR-0022)
-          };
-          config = updatePageSyncInfo(config, syncInfo);
+          // Per ADR-0024: Only store pageId -> localPath mapping
+          // Version, title, timestamps are in frontmatter
+          config = updatePageSyncInfo(config, { pageId: page.id, localPath: newPath });
           writeSpaceConfig(directory, config);
           progress?.onPageComplete?.(currentChange, totalChanges, change.title, newPath);
         } catch (error) {
@@ -654,17 +670,18 @@ export class SyncEngine {
 
       // For force sync: clean up old files that weren't re-downloaded
       // This happens after all pages are successfully processed
+      // Per ADR-0024: previouslyTrackedPages is Record<string, string> (pageId -> localPath)
       if (options.force && !result.cancelled && Object.keys(previouslyTrackedPages).length > 0) {
-        const newTrackedPaths = new Set(Object.values(config.pages).map((p) => p.localPath));
-        for (const [pageId, pageInfo] of Object.entries(previouslyTrackedPages)) {
+        const newTrackedPaths = new Set(Object.values(config.pages));
+        for (const [pageId, localPath] of Object.entries(previouslyTrackedPages)) {
           // Skip if this path was re-used by a new page
-          if (newTrackedPaths.has(pageInfo.localPath)) continue;
+          if (newTrackedPaths.has(localPath)) continue;
           // Skip if page was re-downloaded (exists in new config)
           if (config.pages[pageId]) continue;
 
           try {
-            assertPathWithinDirectory(directory, pageInfo.localPath);
-            const fullPath = join(directory, pageInfo.localPath);
+            assertPathWithinDirectory(directory, localPath);
+            const fullPath = join(directory, localPath);
             if (existsSync(fullPath)) {
               unlinkSync(fullPath);
               // Clean up empty parent directories
@@ -679,7 +696,7 @@ export class SyncEngine {
               }
             }
           } catch (err) {
-            result.warnings.push(`Failed to clean up old file ${pageInfo.localPath}: ${err}`);
+            result.warnings.push(`Failed to clean up old file ${localPath}: ${err}`);
           }
         }
       }

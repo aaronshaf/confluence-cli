@@ -1,5 +1,5 @@
 import { dirname, relative, resolve } from 'node:path';
-import type { PageSyncInfo, SpaceConfigWithState } from '../space-config.js';
+import type { FullPageInfo, PageStateCache } from '../page-state.js';
 
 /**
  * Decode common HTML entities in a string
@@ -16,32 +16,49 @@ function decodeHtmlEntities(text: string): string {
 }
 
 /**
- * Page lookup map for link conversion
+ * Page info for link conversion (subset of FullPageInfo)
  */
-export interface PageLookupMap {
-  // Title -> PageSyncInfo mapping for quick lookup
-  titleToPage: Map<string, PageSyncInfo>;
-  // PageId -> PageSyncInfo mapping
-  idToPage: Map<string, PageSyncInfo>;
-  // LocalPath -> PageSyncInfo mapping for O(1) path lookups
-  pathToPage: Map<string, PageSyncInfo>;
+export interface PageLinkInfo {
+  pageId: string;
+  localPath: string;
+  title: string;
 }
 
 /**
- * Build a lookup map from sync state for efficient link conversion
+ * Page lookup map for link conversion
+ * Per ADR-0024: Uses PageLinkInfo which can come from FullPageInfo or PageStateCache
+ */
+export interface PageLookupMap {
+  // Title -> PageLinkInfo mapping for quick lookup
+  titleToPage: Map<string, PageLinkInfo>;
+  // PageId -> PageLinkInfo mapping
+  idToPage: Map<string, PageLinkInfo>;
+  // LocalPath -> PageLinkInfo mapping for O(1) path lookups
+  pathToPage: Map<string, PageLinkInfo>;
+}
+
+/**
+ * Build a lookup map from PageStateCache for efficient link conversion
+ * Per ADR-0024: This is the primary way to build lookup maps
  *
- * @param syncState - Space configuration with page sync state
+ * @param pageState - PageStateCache built from frontmatter
  * @param warnDuplicates - If true, log warnings for duplicate titles
  * @returns Page lookup map with three indices for efficient lookups
  */
-export function buildPageLookupMap(syncState: SpaceConfigWithState, warnDuplicates = false): PageLookupMap {
-  const titleToPage = new Map<string, PageSyncInfo>();
-  const idToPage = new Map<string, PageSyncInfo>();
-  const pathToPage = new Map<string, PageSyncInfo>();
+export function buildPageLookupMapFromCache(pageState: PageStateCache, warnDuplicates = false): PageLookupMap {
+  const titleToPage = new Map<string, PageLinkInfo>();
+  const idToPage = new Map<string, PageLinkInfo>();
+  const pathToPage = new Map<string, PageLinkInfo>();
 
-  for (const [pageId, pageInfo] of Object.entries(syncState.pages)) {
-    idToPage.set(pageId, pageInfo);
-    pathToPage.set(pageInfo.localPath, pageInfo);
+  for (const [pageId, pageInfo] of pageState.pages) {
+    const linkInfo: PageLinkInfo = {
+      pageId: pageInfo.pageId,
+      localPath: pageInfo.localPath,
+      title: pageInfo.title,
+    };
+
+    idToPage.set(pageId, linkInfo);
+    pathToPage.set(pageInfo.localPath, linkInfo);
 
     const title = pageInfo.title || '';
 
@@ -61,19 +78,19 @@ export function buildPageLookupMap(syncState: SpaceConfigWithState, warnDuplicat
         console.warn(
           `Warning: Duplicate page title "${title}" found:\n` +
             `  - ${existingPage.localPath} (page ID: ${existingPage.pageId})\n` +
-            `  - ${pageInfo.localPath} (page ID: ${pageId})\n` +
-            `  Links to this title will point to ${shouldReplace ? pageInfo.localPath : existingPage.localPath}\n` +
+            `  - ${linkInfo.localPath} (page ID: ${pageId})\n` +
+            `  Links to this title will point to ${shouldReplace ? linkInfo.localPath : existingPage.localPath}\n` +
             `  Recommendation: Rename one of these pages in Confluence to make titles unique.`,
         );
       }
 
       if (shouldReplace) {
-        titleToPage.set(title, pageInfo);
+        titleToPage.set(title, linkInfo);
       }
       // else: keep existing page
     } else {
       // First page with this title
-      titleToPage.set(title, pageInfo);
+      titleToPage.set(title, linkInfo);
     }
   }
 

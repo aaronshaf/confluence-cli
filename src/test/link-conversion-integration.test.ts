@@ -2,42 +2,57 @@ import { describe, expect, test } from 'bun:test';
 import { MarkdownConverter } from '../lib/markdown/converter.js';
 import { HtmlConverter } from '../lib/markdown/html-converter.js';
 import { parseMarkdown } from '../lib/markdown/frontmatter.js';
-import { buildPageLookupMap } from '../lib/markdown/link-converter.js';
-import type { SpaceConfigWithState } from '../lib/space-config.js';
+import { buildPageLookupMapFromCache } from '../lib/markdown/link-converter.js';
+import type { PageStateCache, FullPageInfo } from '../lib/page-state.js';
+
+/**
+ * Helper to create PageStateCache from a simple record
+ */
+function createPageStateCache(
+  pages: Record<string, { pageId: string; localPath: string; title: string }>,
+): PageStateCache {
+  const pagesMap = new Map<string, FullPageInfo>();
+  const pathToPageId = new Map<string, string>();
+
+  for (const [pageId, info] of Object.entries(pages)) {
+    pagesMap.set(pageId, {
+      pageId: info.pageId,
+      localPath: info.localPath,
+      title: info.title,
+      version: 1,
+    });
+    pathToPageId.set(info.localPath, pageId);
+  }
+
+  return { pages: pagesMap, pathToPageId };
+}
 
 describe('Link Conversion Integration Tests', () => {
   // TODO: This test requires enhancements to turndown parsing of ac:link elements
   // The link conversion logic is implemented correctly, but turndown needs custom
   // handling for CDATA content in ac:plain-text-link-body elements
   test.skip('full pull-modify-push cycle converts links correctly', () => {
-    // Setup: Create mock sync state with multiple pages
-    const syncState: SpaceConfigWithState = {
-      spaceKey: 'TEST',
-      spaceId: 'space-123',
-      spaceName: 'Test Space',
-      pages: {
-        'page-1': {
-          pageId: 'page-1',
-          version: 1,
-          localPath: 'home.md',
-          title: 'Home',
-        },
-        'page-2': {
-          pageId: 'page-2',
-          version: 1,
-          localPath: 'architecture/overview.md',
-          title: 'Architecture Overview',
-        },
-        'page-3': {
-          pageId: 'page-3',
-          version: 1,
-          localPath: 'architecture/database.md',
-          title: 'Database Design',
-        },
+    // Setup: Create mock page state with multiple pages
+    // Per ADR-0024: Use PageStateCache built from frontmatter
+    const pageState = createPageStateCache({
+      'page-1': {
+        pageId: 'page-1',
+        localPath: 'home.md',
+        title: 'Home',
       },
-    };
+      'page-2': {
+        pageId: 'page-2',
+        localPath: 'architecture/overview.md',
+        title: 'Architecture Overview',
+      },
+      'page-3': {
+        pageId: 'page-3',
+        localPath: 'architecture/database.md',
+        title: 'Database Design',
+      },
+    });
 
-    const pageLookupMap = buildPageLookupMap(syncState);
+    const pageLookupMap = buildPageLookupMapFromCache(pageState);
 
     // Step 1: PULL - Convert Confluence HTML with page links to markdown
     const confluenceHtml = `<p>Welcome to our documentation!</p><p>Check out the <ac:link><ri:page ri:content-title="Architecture Overview" ri:space-key="TEST" /><ac:plain-text-link-body><![CDATA[Architecture]]></ac:plain-text-link-body></ac:link> for design details.</p><p>Also see <ac:link><ri:page ri:content-title="Database Design" ri:space-key="TEST" /><ac:plain-text-link-body><![CDATA[Database Schema]]></ac:plain-text-link-body></ac:link>.</p>`;
@@ -107,21 +122,16 @@ describe('Link Conversion Integration Tests', () => {
 
   // TODO: Same issue as above - requires turndown enhancement
   test.skip('handles broken links gracefully during pull and push', () => {
-    const syncState: SpaceConfigWithState = {
-      spaceKey: 'TEST',
-      spaceId: 'space-123',
-      spaceName: 'Test Space',
-      pages: {
-        'page-1': {
-          pageId: 'page-1',
-          version: 1,
-          localPath: 'home.md',
-          title: 'Home',
-        },
+    // Per ADR-0024: Use PageStateCache built from frontmatter
+    const pageState = createPageStateCache({
+      'page-1': {
+        pageId: 'page-1',
+        localPath: 'home.md',
+        title: 'Home',
       },
-    };
+    });
 
-    const pageLookupMap = buildPageLookupMap(syncState);
+    const pageLookupMap = buildPageLookupMapFromCache(pageState);
 
     // PULL: Link to non-existent page in Confluence
     const confluenceHtml = `<p>See <ac:link><ri:page ri:content-title="Non Existent Page" ri:space-key="TEST" /><ac:plain-text-link-body><![CDATA[Non Existent]]></ac:plain-text-link-body></ac:link>.</p>`;

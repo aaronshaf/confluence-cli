@@ -48,6 +48,7 @@ Records of significant architectural decisions with context and rationale:
 | `0019-sync-modes.md` | Smart vs full sync modes |
 | `0020-bidirectional-sync-push.md` | Push command for bidirectional sync |
 | `0021-use-meilisearch-for-local-search.md` | Meilisearch for local search |
+| `0024-frontmatter-source-of-truth.md` | Frontmatter as source of truth for sync state |
 
 ## Style
 

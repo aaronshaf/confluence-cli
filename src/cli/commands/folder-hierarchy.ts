@@ -202,3 +202,34 @@ export async function ensureFolderHierarchy(
   // The v2 API supports creating pages directly under folders
   return { parentId: currentParentId, updatedConfig: config };
 }
+
+/**
+ * Determine expected parent ID based on file's folder location
+ * Reuses ensureFolderHierarchy logic to find or create the parent folder
+ *
+ * @param client - Confluence client
+ * @param spaceConfig - Current space configuration
+ * @param directory - Base directory of the space
+ * @param filePath - Relative path to the file
+ * @param dryRun - If true, don't create folders
+ * @returns The expected parent ID and updated config
+ */
+export async function determineExpectedParent(
+  client: ConfluenceClient,
+  spaceConfig: SpaceConfigWithState,
+  directory: string,
+  filePath: string,
+  dryRun = false,
+): Promise<FolderHierarchyResult> {
+  // Get directory path
+  const normalizedPath = filePath.replace(/^\.\//, '');
+  const dirPath = dirname(normalizedPath);
+
+  // Root level file - no parent
+  if (dirPath === '.') {
+    return { parentId: undefined, updatedConfig: spaceConfig };
+  }
+
+  // Use ensureFolderHierarchy to determine (and create if needed) the parent
+  return ensureFolderHierarchy(client, spaceConfig, directory, filePath, dryRun);
+}

@@ -11,10 +11,11 @@ export {
 } from './frontmatter.js';
 export { generateUniqueFilename, slugify } from './slugify.js';
 export {
-  buildPageLookupMap,
+  buildPageLookupMapFromCache,
   confluenceLinkToRelativePath,
   extractPageTitleFromLink,
   relativePathToConfluenceLink,
+  type PageLinkInfo,
   type PageLookupMap,
 } from './link-converter.js';
 export { updateReferencesAfterRename, type ReferenceUpdateResult } from './reference-updater.js';

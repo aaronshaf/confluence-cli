@@ -120,16 +120,18 @@ describe('SyncEngine', () => {
     test('detects modified pages', () => {
       const remotePages = [{ id: 'page-1', title: 'Page 1', spaceId: 'space-123', version: { number: 2 } }];
 
+      // Per ADR-0024: pages is now Record<string, string> (pageId -> localPath)
       const localConfig: SpaceConfigWithState = {
         spaceKey: 'TEST',
         spaceId: 'space-123',
         spaceName: 'Test Space',
         pages: {
-          'page-1': { pageId: 'page-1', version: 1, localPath: 'page-1.md' },
+          'page-1': 'page-1.md',
         },
       };
 
       const engine = new SyncEngine(testConfig);
+      // Without PageStateCache, local version defaults to 0, so remote v2 > local v0 -> modified
       const diff = engine.computeDiff(remotePages, localConfig);
 
       expect(diff.added).toHaveLength(0);
@@ -140,12 +142,13 @@ describe('SyncEngine', () => {
     test('detects deleted pages', () => {
       const remotePages: any[] = [];
 
+      // Per ADR-0024: pages is now Record<string, string> (pageId -> localPath)
       const localConfig: SpaceConfigWithState = {
         spaceKey: 'TEST',
         spaceId: 'space-123',
         spaceName: 'Test Space',
         pages: {
-          'page-1': { pageId: 'page-1', version: 1, localPath: 'page-1.md' },
+          'page-1': 'page-1.md',
         },
       };
 

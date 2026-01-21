@@ -4,6 +4,7 @@ import { ConfluenceClient } from '../../lib/confluence-client/index.js';
 import { ConfigManager } from '../../lib/config.js';
 import { EXIT_CODES } from '../../lib/errors.js';
 import { getFormatter, type StatusInfo } from '../../lib/formatters.js';
+import { buildPageStateFromFiles } from '../../lib/page-state.js';
 import { readSpaceConfig } from '../../lib/space-config.js';
 import { SyncEngine } from '../../lib/sync/index.js';
 
@@ -63,7 +64,9 @@ export async function statusCommand(options: StatusCommandOptions = {}): Promise
       try {
         const syncEngine = new SyncEngine(config);
         const remotePages = await syncEngine.fetchPageTree(spaceConfig.spaceId);
-        const diff = syncEngine.computeDiff(remotePages, spaceConfig);
+        // Per ADR-0024: Build PageStateCache for version comparison from frontmatter
+        const pageState = buildPageStateFromFiles(directory, spaceConfig.pages);
+        const diff = syncEngine.computeDiff(remotePages, spaceConfig, pageState);
 
         status.pendingChanges = {
           added: diff.added.length,

@@ -1,36 +1,52 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  buildPageLookupMap,
+  buildPageLookupMapFromCache,
   confluenceLinkToRelativePath,
   extractPageTitleFromLink,
   relativePathToConfluenceLink,
   type PageLookupMap,
 } from '../lib/markdown/link-converter.js';
-import { updatePageSyncInfo, type SpaceConfigWithState } from '../lib/space-config.js';
+import type { PageStateCache, FullPageInfo } from '../lib/page-state.js';
 
-describe('buildPageLookupMap', () => {
-  test('builds lookup maps from sync state', () => {
-    const syncState: SpaceConfigWithState = {
-      spaceKey: 'TEST',
-      spaceId: 'space-123',
-      spaceName: 'Test Space',
-      pages: {
-        'page-1': {
-          pageId: 'page-1',
-          version: 1,
-          localPath: 'getting-started.md',
-          title: 'Getting Started',
-        },
-        'page-2': {
-          pageId: 'page-2',
-          version: 1,
-          localPath: 'architecture/overview.md',
-          title: 'Architecture Overview',
-        },
+/**
+ * Helper to create PageStateCache from a simple record
+ * Simplifies test setup by avoiding need to create actual files
+ */
+function createPageStateCache(
+  pages: Record<string, { pageId: string; localPath: string; title: string; version?: number }>,
+): PageStateCache {
+  const pagesMap = new Map<string, FullPageInfo>();
+  const pathToPageId = new Map<string, string>();
+
+  for (const [pageId, info] of Object.entries(pages)) {
+    pagesMap.set(pageId, {
+      pageId: info.pageId,
+      localPath: info.localPath,
+      title: info.title,
+      version: info.version ?? 1,
+    });
+    pathToPageId.set(info.localPath, pageId);
+  }
+
+  return { pages: pagesMap, pathToPageId };
+}
+
+describe('buildPageLookupMapFromCache', () => {
+  test('builds lookup maps from PageStateCache', () => {
+    const pageState = createPageStateCache({
+      'page-1': {
+        pageId: 'page-1',
+        localPath: 'getting-started.md',
+        title: 'Getting Started',
       },
-    };
+      'page-2': {
+        pageId: 'page-2',
+        localPath: 'architecture/overview.md',
+        title: 'Architecture Overview',
+      },
+    });
 
-    const lookupMap = buildPageLookupMap(syncState);
+    const lookupMap = buildPageLookupMapFromCache(pageState);
 
     expect(lookupMap.idToPage.get('page-1')?.localPath).toBe('getting-started.md');
     expect(lookupMap.idToPage.get('page-2')?.localPath).toBe('architecture/overview.md');
@@ -41,52 +57,38 @@ describe('buildPageLookupMap', () => {
   });
 
   test('handles duplicate titles (deterministic ordering)', () => {
-    const syncState: SpaceConfigWithState = {
-      spaceKey: 'TEST',
-      spaceId: 'space-123',
-      spaceName: 'Test Space',
-      pages: {
-        'page-2': {
-          pageId: 'page-2',
-          version: 1,
-          localPath: 'architecture/overview.md',
-          title: 'Overview',
-        },
-        'page-1': {
-          pageId: 'page-1',
-          version: 1,
-          localPath: 'overview.md',
-          title: 'Overview',
-        },
+    const pageState = createPageStateCache({
+      'page-2': {
+        pageId: 'page-2',
+        localPath: 'architecture/overview.md',
+        title: 'Overview',
       },
-    };
+      'page-1': {
+        pageId: 'page-1',
+        localPath: 'overview.md',
+        title: 'Overview',
+      },
+    });
 
-    const lookupMap = buildPageLookupMap(syncState);
+    const lookupMap = buildPageLookupMapFromCache(pageState);
 
     // Page with lexicographically smallest pageId should win (page-1 < page-2)
     expect(lookupMap.titleToPage.get('Overview')?.pageId).toBe('page-1');
   });
 
   test('warns about duplicate titles when enabled', () => {
-    const syncState: SpaceConfigWithState = {
-      spaceKey: 'TEST',
-      spaceId: 'space-123',
-      spaceName: 'Test Space',
-      pages: {
-        'page-2': {
-          pageId: 'page-2',
-          version: 1,
-          localPath: 'architecture/overview.md',
-          title: 'Overview',
-        },
-        'page-1': {
-          pageId: 'page-1',
-          version: 1,
-          localPath: 'overview.md',
-          title: 'Overview',
-        },
+    const pageState = createPageStateCache({
+      'page-2': {
+        pageId: 'page-2',
+        localPath: 'architecture/overview.md',
+        title: 'Overview',
       },
-    };
+      'page-1': {
+        pageId: 'page-1',
+        localPath: 'overview.md',
+        title: 'Overview',
+      },
+    });
 
     // Capture console.warn calls
     const originalWarn = console.warn;
@@ -94,7 +96,7 @@ describe('buildPageLookupMap', () => {
     console.warn = (msg: string) => warnings.push(msg);
 
     try {
-      buildPageLookupMap(syncState, true);
+      buildPageLookupMapFromCache(pageState, true);
 
       // Should have warned about duplicate
       expect(warnings.length).toBe(1);
@@ -108,15 +110,13 @@ describe('buildPageLookupMap', () => {
     }
   });
 
-  test('handles empty sync state', () => {
-    const syncState: SpaceConfigWithState = {
-      spaceKey: 'TEST',
-      spaceId: 'space-123',
-      spaceName: 'Test Space',
-      pages: {},
+  test('handles empty PageStateCache', () => {
+    const pageState: PageStateCache = {
+      pages: new Map(),
+      pathToPageId: new Map(),
     };
 
-    const lookupMap = buildPageLookupMap(syncState);
+    const lookupMap = buildPageLookupMapFromCache(pageState);
 
     expect(lookupMap.idToPage.size).toBe(0);
     expect(lookupMap.titleToPage.size).toBe(0);
@@ -127,62 +127,54 @@ describe('buildPageLookupMap', () => {
 describe('confluenceLinkToRelativePath', () => {
   let lookupMap: PageLookupMap;
 
-  const syncState: SpaceConfigWithState = {
-    spaceKey: 'TEST',
-    spaceId: 'space-123',
-    spaceName: 'Test Space',
-    pages: {
-      'page-1': {
-        pageId: 'page-1',
-        version: 1,
-        localPath: 'getting-started.md',
-        title: 'Getting Started',
-      },
-      'page-2': {
-        pageId: 'page-2',
-        version: 1,
-        localPath: 'architecture/overview.md',
-        title: 'Architecture Overview',
-      },
-      'page-3': {
-        pageId: 'page-3',
-        version: 1,
-        localPath: 'architecture/database.md',
-        title: 'Database Design',
-      },
+  const pageState = createPageStateCache({
+    'page-1': {
+      pageId: 'page-1',
+      localPath: 'getting-started.md',
+      title: 'Getting Started',
     },
-  };
+    'page-2': {
+      pageId: 'page-2',
+      localPath: 'architecture/overview.md',
+      title: 'Architecture Overview',
+    },
+    'page-3': {
+      pageId: 'page-3',
+      localPath: 'architecture/database.md',
+      title: 'Database Design',
+    },
+  });
 
   test('converts Confluence link to relative path (same directory)', () => {
-    lookupMap = buildPageLookupMap(syncState);
+    lookupMap = buildPageLookupMapFromCache(pageState);
     const result = confluenceLinkToRelativePath('Architecture Overview', 'architecture/database.md', lookupMap);
 
     expect(result).toBe('./overview.md');
   });
 
   test('converts Confluence link to relative path (parent directory)', () => {
-    lookupMap = buildPageLookupMap(syncState);
+    lookupMap = buildPageLookupMapFromCache(pageState);
     const result = confluenceLinkToRelativePath('Getting Started', 'architecture/database.md', lookupMap);
 
     expect(result).toBe('../getting-started.md');
   });
 
   test('converts Confluence link to relative path (child directory)', () => {
-    lookupMap = buildPageLookupMap(syncState);
+    lookupMap = buildPageLookupMapFromCache(pageState);
     const result = confluenceLinkToRelativePath('Architecture Overview', 'getting-started.md', lookupMap);
 
     expect(result).toBe('./architecture/overview.md');
   });
 
   test('returns null for non-existent page', () => {
-    lookupMap = buildPageLookupMap(syncState);
+    lookupMap = buildPageLookupMapFromCache(pageState);
     const result = confluenceLinkToRelativePath('Non Existent Page', 'getting-started.md', lookupMap);
 
     expect(result).toBeNull();
   });
 
   test('handles paths that need ./ prefix', () => {
-    lookupMap = buildPageLookupMap(syncState);
+    lookupMap = buildPageLookupMapFromCache(pageState);
     const result = confluenceLinkToRelativePath('Database Design', 'architecture/overview.md', lookupMap);
 
     expect(result).toBe('./database.md');
@@ -251,34 +243,26 @@ describe('extractPageTitleFromLink', () => {
 describe('relativePathToConfluenceLink', () => {
   let lookupMap: PageLookupMap;
 
-  const syncState: SpaceConfigWithState = {
-    spaceKey: 'TEST',
-    spaceId: 'space-123',
-    spaceName: 'Test Space',
-    pages: {
-      'page-1': {
-        pageId: 'page-1',
-        version: 1,
-        localPath: 'getting-started.md',
-        title: 'Getting Started',
-      },
-      'page-2': {
-        pageId: 'page-2',
-        version: 1,
-        localPath: 'architecture/overview.md',
-        title: 'Architecture Overview',
-      },
-      'page-3': {
-        pageId: 'page-3',
-        version: 1,
-        localPath: 'architecture/database.md',
-        title: 'Database Design',
-      },
+  const pageState = createPageStateCache({
+    'page-1': {
+      pageId: 'page-1',
+      localPath: 'getting-started.md',
+      title: 'Getting Started',
     },
-  };
+    'page-2': {
+      pageId: 'page-2',
+      localPath: 'architecture/overview.md',
+      title: 'Architecture Overview',
+    },
+    'page-3': {
+      pageId: 'page-3',
+      localPath: 'architecture/database.md',
+      title: 'Database Design',
+    },
+  });
 
   test('converts relative path to Confluence link (same directory)', () => {
-    lookupMap = buildPageLookupMap(syncState);
+    lookupMap = buildPageLookupMapFromCache(pageState);
     const result = relativePathToConfluenceLink('./overview.md', 'architecture/database.md', '/test/space', lookupMap);
 
     expect(result).not.toBeNull();
@@ -287,7 +271,7 @@ describe('relativePathToConfluenceLink', () => {
   });
 
   test('converts relative path to Confluence link (parent directory)', () => {
-    lookupMap = buildPageLookupMap(syncState);
+    lookupMap = buildPageLookupMapFromCache(pageState);
     const result = relativePathToConfluenceLink(
       '../getting-started.md',
       'architecture/database.md',
@@ -301,7 +285,7 @@ describe('relativePathToConfluenceLink', () => {
   });
 
   test('converts relative path to Confluence link (child directory)', () => {
-    lookupMap = buildPageLookupMap(syncState);
+    lookupMap = buildPageLookupMapFromCache(pageState);
     const result = relativePathToConfluenceLink(
       './architecture/overview.md',
       'getting-started.md',
@@ -315,14 +299,14 @@ describe('relativePathToConfluenceLink', () => {
   });
 
   test('returns null for non-existent file', () => {
-    lookupMap = buildPageLookupMap(syncState);
+    lookupMap = buildPageLookupMapFromCache(pageState);
     const result = relativePathToConfluenceLink('./non-existent.md', 'getting-started.md', '/test/space', lookupMap);
 
     expect(result).toBeNull();
   });
 
   test('handles paths without ./ prefix', () => {
-    lookupMap = buildPageLookupMap(syncState);
+    lookupMap = buildPageLookupMapFromCache(pageState);
     const result = relativePathToConfluenceLink('database.md', 'architecture/overview.md', '/test/space', lookupMap);
 
     expect(result).not.toBeNull();
@@ -331,21 +315,15 @@ describe('relativePathToConfluenceLink', () => {
   });
 
   test('handles deeply nested paths', () => {
-    const deepSyncState: SpaceConfigWithState = {
-      spaceKey: 'TEST',
-      spaceId: 'space-123',
-      spaceName: 'Test Space',
-      pages: {
-        'page-deep': {
-          pageId: 'page-deep',
-          version: 1,
-          localPath: 'a/b/c/d/e/f/g/h/page.md',
-          title: 'Deep Page',
-        },
+    const deepPageState = createPageStateCache({
+      'page-deep': {
+        pageId: 'page-deep',
+        localPath: 'a/b/c/d/e/f/g/h/page.md',
+        title: 'Deep Page',
       },
-    };
+    });
 
-    lookupMap = buildPageLookupMap(deepSyncState);
+    lookupMap = buildPageLookupMapFromCache(deepPageState);
     const result = relativePathToConfluenceLink('./a/b/c/d/e/f/g/h/page.md', 'home.md', '/test/space', lookupMap);
 
     expect(result).not.toBeNull();
@@ -355,35 +333,35 @@ describe('relativePathToConfluenceLink', () => {
 });
 
 describe('batch config propagation', () => {
-  test('in-memory config updates allow subsequent link resolution', () => {
+  test('in-memory PageStateCache updates allow subsequent link resolution', () => {
     // This test verifies the fix for batch push link resolution
     // When pushing multiple files, the first file's page info should be available
     // for link resolution in subsequent files
 
-    // Start with a config that has no pages (simulating start of batch push)
-    let config: SpaceConfigWithState = {
-      spaceKey: 'TEST',
-      spaceId: 'space-123',
-      spaceName: 'Test Space',
-      pages: {},
+    // Start with an empty PageStateCache (simulating start of batch push)
+    const pageState: PageStateCache = {
+      pages: new Map(),
+      pathToPageId: new Map(),
     };
 
     // At this point, links to page-a.md cannot be resolved
-    let lookupMap = buildPageLookupMap(config);
+    let lookupMap = buildPageLookupMapFromCache(pageState);
     let result = relativePathToConfluenceLink('./page-a.md', 'page-b.md', '/test/space', lookupMap);
     expect(result).toBeNull();
 
-    // Simulate pushing page-a.md - this updates the in-memory config
-    config = updatePageSyncInfo(config, {
+    // Simulate pushing page-a.md - this updates the in-memory PageStateCache
+    const pageAInfo: FullPageInfo = {
       pageId: 'page-a-id',
-      version: 1,
       localPath: 'page-a.md',
       title: 'Page A',
-    });
+      version: 1,
+    };
+    pageState.pages.set('page-a-id', pageAInfo);
+    pageState.pathToPageId.set('page-a.md', 'page-a-id');
 
-    // Now rebuild the lookup map with the updated config
-    // This is what happens during batch push - the updated config is passed to the next file
-    lookupMap = buildPageLookupMap(config);
+    // Now rebuild the lookup map with the updated PageStateCache
+    // This is what happens during batch push - the updated state is passed to the next file
+    lookupMap = buildPageLookupMapFromCache(pageState);
 
     // Now links to page-a.md CAN be resolved
     result = relativePathToConfluenceLink('./page-a.md', 'page-b.md', '/test/space', lookupMap);
@@ -394,35 +372,37 @@ describe('batch config propagation', () => {
 
   test('multiple pages pushed in sequence are all resolvable', () => {
     // Simulates pushing three files where each links to the previous
-    let config: SpaceConfigWithState = {
-      spaceKey: 'TEST',
-      spaceId: 'space-123',
-      spaceName: 'Test Space',
-      pages: {},
+    const pageState: PageStateCache = {
+      pages: new Map(),
+      pathToPageId: new Map(),
     };
 
     // Push page-a.md
-    config = updatePageSyncInfo(config, {
+    const pageAInfo: FullPageInfo = {
       pageId: 'page-a-id',
-      version: 1,
       localPath: 'page-a.md',
       title: 'Page A',
-    });
+      version: 1,
+    };
+    pageState.pages.set('page-a-id', pageAInfo);
+    pageState.pathToPageId.set('page-a.md', 'page-a-id');
 
     // Push page-b.md (can now link to page-a)
-    let lookupMap = buildPageLookupMap(config);
+    let lookupMap = buildPageLookupMapFromCache(pageState);
     let result = relativePathToConfluenceLink('./page-a.md', 'page-b.md', '/test/space', lookupMap);
     expect(result?.pageId).toBe('page-a-id');
 
-    config = updatePageSyncInfo(config, {
+    const pageBInfo: FullPageInfo = {
       pageId: 'page-b-id',
-      version: 1,
       localPath: 'page-b.md',
       title: 'Page B',
-    });
+      version: 1,
+    };
+    pageState.pages.set('page-b-id', pageBInfo);
+    pageState.pathToPageId.set('page-b.md', 'page-b-id');
 
     // Push page-c.md (can now link to both page-a and page-b)
-    lookupMap = buildPageLookupMap(config);
+    lookupMap = buildPageLookupMapFromCache(pageState);
 
     result = relativePathToConfluenceLink('./page-a.md', 'page-c.md', '/test/space', lookupMap);
     expect(result?.pageId).toBe('page-a-id');

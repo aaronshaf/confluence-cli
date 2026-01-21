@@ -131,31 +131,32 @@ export async function treeCommand(options: TreeCommandOptions = {}): Promise<voi
       }
 
       // Build pages from sync state, inferring hierarchy from file paths
+      // Per ADR-0024: pages is now Record<string, string> (pageId -> localPath)
       // Create a map of directory paths to page IDs for parent lookup
+      // Note: sync-engine uses README.md for directory index files (per ADR-0005)
       const pathToPageId = new Map<string, string>();
-      for (const info of Object.values(spaceConfig.pages)) {
-        // For index.md files, map the parent directory
-        if (info.localPath.endsWith('/index.md')) {
-          const dir = info.localPath.replace('/index.md', '');
-          pathToPageId.set(dir, info.pageId);
+      for (const [pageId, localPath] of Object.entries(spaceConfig.pages)) {
+        // For README.md files (directory index), map the parent directory
+        if (localPath.endsWith('/README.md') || localPath === 'README.md') {
+          const dir = localPath.replace('/README.md', '').replace('README.md', '');
+          pathToPageId.set(dir, pageId);
         }
       }
 
-      pages = Object.values(spaceConfig.pages).map((info) => {
+      pages = Object.entries(spaceConfig.pages).map(([pageId, localPath]) => {
         // Extract title from filename
-        const filename = info.localPath.split('/').pop() || '';
-        const title = filename.replace('.md', '').replace('index', '') || info.pageId;
+        const filename = localPath.split('/').pop() || '';
+        const title = filename.replace('.md', '').replace(/^README$/i, '') || pageId;
 
         // Infer parent from path structure
-        const pathParts = info.localPath.split('/');
+        const pathParts = localPath.split('/');
         let parentId: string | null = null;
 
         if (pathParts.length > 1) {
-          // For regular files, parent is the directory's index.md
-          // For index.md, parent is the grandparent directory's index.md
-          const parentDir = info.localPath.endsWith('/index.md')
-            ? pathParts.slice(0, -2).join('/')
-            : pathParts.slice(0, -1).join('/');
+          // For regular files, parent is the directory's README.md
+          // For README.md, parent is the grandparent directory's README.md
+          const isReadme = localPath.endsWith('/README.md');
+          const parentDir = isReadme ? pathParts.slice(0, -2).join('/') : pathParts.slice(0, -1).join('/');
 
           if (parentDir) {
             parentId = pathToPageId.get(parentDir) || null;
@@ -163,8 +164,8 @@ export async function treeCommand(options: TreeCommandOptions = {}): Promise<voi
         }
 
         return {
-          id: info.pageId,
-          title: title || info.localPath,
+          id: pageId,
+          title: title || localPath,
           spaceId: spaceConfig.spaceId,
           parentId,
         };

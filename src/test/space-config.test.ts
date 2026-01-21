@@ -16,7 +16,6 @@ import {
   getFolderById,
   removeFolderSyncInfo,
   type SpaceConfigWithState,
-  type PageSyncInfo,
   type FolderSyncInfo,
 } from '../lib/space-config.js';
 
@@ -66,17 +65,14 @@ describe('space-config', () => {
     });
 
     test('reads valid config', () => {
+      // Per ADR-0024: pages is now Record<string, string> (pageId -> localPath)
       const testConfig: SpaceConfigWithState = {
         spaceKey: 'TEST',
         spaceId: 'space-123',
         spaceName: 'Test Space',
         lastSync: '2024-01-01T00:00:00Z',
         pages: {
-          'page-1': {
-            pageId: 'page-1',
-            version: 1,
-            localPath: 'home.md',
-          },
+          'page-1': 'home.md',
         },
       };
 
@@ -88,7 +84,46 @@ describe('space-config', () => {
       expect(config).not.toBeNull();
       expect(config?.spaceKey).toBe('TEST');
       expect(config?.spaceName).toBe('Test Space');
-      expect(config?.pages['page-1'].localPath).toBe('home.md');
+      expect(config?.pages['page-1']).toBe('home.md');
+    });
+
+    test('migrates legacy format to new format', () => {
+      // Legacy format: pages contain full PageSyncInfo objects
+      const legacyConfig = {
+        spaceKey: 'TEST',
+        spaceId: 'space-123',
+        spaceName: 'Test Space',
+        pages: {
+          'page-1': {
+            pageId: 'page-1',
+            version: 5,
+            lastModified: '2024-01-14T08:00:00Z',
+            localPath: 'docs/intro.md',
+            title: 'Introduction',
+          },
+          'page-2': {
+            pageId: 'page-2',
+            version: 3,
+            localPath: 'docs/setup.md',
+            title: 'Setup Guide',
+          },
+        },
+      };
+
+      const configPath = join(testDir, '.confluence.json');
+      writeFileSync(configPath, JSON.stringify(legacyConfig));
+
+      const config = readSpaceConfig(testDir);
+
+      // Should be migrated to new format
+      expect(config).not.toBeNull();
+      expect(config?.pages['page-1']).toBe('docs/intro.md');
+      expect(config?.pages['page-2']).toBe('docs/setup.md');
+
+      // Verify the file was rewritten with new format
+      const savedContent = JSON.parse(readFileSync(configPath, 'utf-8'));
+      expect(savedContent.pages['page-1']).toBe('docs/intro.md');
+      expect(savedContent.pages['page-2']).toBe('docs/setup.md');
     });
 
     test('returns null for invalid JSON', () => {
@@ -160,42 +195,33 @@ describe('space-config', () => {
         pages: {},
       };
 
-      const pageInfo: PageSyncInfo = {
+      // Per ADR-0024: Only pageId and localPath are stored
+      const updated = updatePageSyncInfo(config, {
         pageId: 'page-1',
-        version: 1,
         localPath: 'home.md',
-      };
-
-      const updated = updatePageSyncInfo(config, pageInfo);
+      });
 
       expect(updated.pages['page-1']).toBeDefined();
-      expect(updated.pages['page-1'].version).toBe(1);
-      expect(updated.pages['page-1'].localPath).toBe('home.md');
+      expect(updated.pages['page-1']).toBe('home.md');
     });
 
     test('updates existing page', () => {
+      // Per ADR-0024: pages is now Record<string, string>
       const config: SpaceConfigWithState = {
         spaceKey: 'TEST',
         spaceId: 'space-123',
         spaceName: 'Test Space',
         pages: {
-          'page-1': {
-            pageId: 'page-1',
-            version: 1,
-            localPath: 'home.md',
-          },
+          'page-1': 'home.md',
         },
       };
 
-      const pageInfo: PageSyncInfo = {
+      const updated = updatePageSyncInfo(config, {
         pageId: 'page-1',
-        version: 2,
-        localPath: 'home.md',
-      };
+        localPath: 'new-home.md',
+      });
 
-      const updated = updatePageSyncInfo(config, pageInfo);
-
-      expect(updated.pages['page-1'].version).toBe(2);
+      expect(updated.pages['page-1']).toBe('new-home.md');
     });
 
     test('does not mutate original config', () => {
@@ -206,13 +232,10 @@ describe('space-config', () => {
         pages: {},
       };
 
-      const pageInfo: PageSyncInfo = {
+      const updated = updatePageSyncInfo(config, {
         pageId: 'page-1',
-        version: 1,
         localPath: 'home.md',
-      };
-
-      const updated = updatePageSyncInfo(config, pageInfo);
+      });
 
       expect(Object.keys(config.pages)).toHaveLength(0);
       expect(updated).not.toBe(config);
@@ -221,21 +244,14 @@ describe('space-config', () => {
 
   describe('removePageSyncInfo', () => {
     test('removes existing page', () => {
+      // Per ADR-0024: pages is now Record<string, string>
       const config: SpaceConfigWithState = {
         spaceKey: 'TEST',
         spaceId: 'space-123',
         spaceName: 'Test Space',
         pages: {
-          'page-1': {
-            pageId: 'page-1',
-            version: 1,
-            localPath: 'home.md',
-          },
-          'page-2': {
-            pageId: 'page-2',
-            version: 1,
-            localPath: 'getting-started.md',
-          },
+          'page-1': 'home.md',
+          'page-2': 'getting-started.md',
         },
       };
 
@@ -261,14 +277,15 @@ describe('space-config', () => {
 
   describe('getTrackedPageIds', () => {
     test('returns all tracked page IDs', () => {
+      // Per ADR-0024: pages is now Record<string, string>
       const config: SpaceConfigWithState = {
         spaceKey: 'TEST',
         spaceId: 'space-123',
         spaceName: 'Test Space',
         pages: {
-          'page-1': { pageId: 'page-1', version: 1, localPath: 'home.md' },
-          'page-2': { pageId: 'page-2', version: 1, localPath: 'getting-started.md' },
-          'page-3': { pageId: 'page-3', version: 1, localPath: 'api.md' },
+          'page-1': 'home.md',
+          'page-2': 'getting-started.md',
+          'page-3': 'api.md',
         },
       };
 

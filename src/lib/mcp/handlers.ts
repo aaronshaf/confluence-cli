@@ -86,13 +86,14 @@ export function resolvePagePath(
   }
 
   // id is provided (already validated that at least one of path/id exists)
+  // Per ADR-0024: pages is now Record<string, string> (pageId -> localPath)
   const pageId = input.id as string;
-  const pageInfo = spaceConfig.pages[pageId];
-  if (!pageInfo) {
+  const localPath = spaceConfig.pages[pageId];
+  if (!localPath) {
     throw new McpPageNotFoundError(pageId);
   }
 
-  const absolutePath = join(workspacePath, pageInfo.localPath);
+  const absolutePath = join(workspacePath, localPath);
   if (!existsSync(absolutePath)) {
     throw new McpPageNotFoundError(pageId);
   }

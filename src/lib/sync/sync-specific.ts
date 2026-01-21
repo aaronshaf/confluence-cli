@@ -3,13 +3,13 @@ import { basename, dirname, join, resolve } from 'node:path';
 import type { ConfluenceClient, User } from '../confluence-client/index.js';
 import { SyncError } from '../errors.js';
 import { RESERVED_FILENAMES } from '../file-scanner.js';
-import { buildPageLookupMap, type MarkdownConverter } from '../markdown/index.js';
+import { buildPageLookupMapFromCache, type MarkdownConverter } from '../markdown/index.js';
+import { buildPageStateFromFiles } from '../page-state.js';
 import {
   readSpaceConfig,
   updateLastSync,
   updatePageSyncInfo,
   writeSpaceConfig,
-  type PageSyncInfo,
   type SpaceConfigWithState,
 } from '../space-config.js';
 import type { SyncOptions, SyncResult } from './sync-engine.js';
@@ -80,9 +80,10 @@ export async function syncSpecificPages(
     }
 
     // Build reverse lookup from localPath to pageId
+    // Per ADR-0024: config.pages is now Record<string, string> (pageId -> localPath)
     const pathToPageId = new Map<string, string>();
-    for (const [pageId, pageInfo] of Object.entries(config.pages)) {
-      pathToPageId.set(pageInfo.localPath, pageId);
+    for (const [pageId, localPath] of Object.entries(config.pages)) {
+      pathToPageId.set(localPath, pageId);
     }
 
     // Resolve page references to IDs
@@ -111,11 +112,12 @@ export async function syncSpecificPages(
     progress?.onFetchComplete?.(pageIds.length, 0);
 
     // Build diff - all specified pages are "modified"
+    // Per ADR-0024: config.pages[pageId] is now just the localPath string
     for (const pageId of pageIds) {
-      const pageInfo = config.pages[pageId];
-      if (pageInfo) {
+      const localPath = config.pages[pageId];
+      if (localPath) {
         const title =
-          pageInfo.localPath
+          localPath
             .split('/')
             .pop()
             ?.replace('.md', '')
@@ -124,7 +126,7 @@ export async function syncSpecificPages(
           type: 'modified',
           pageId,
           title,
-          localPath: pageInfo.localPath,
+          localPath,
         });
       }
     }
@@ -138,9 +140,11 @@ export async function syncSpecificPages(
     // Create cached user fetcher
     const fetchUser = createUserFetcher(client);
 
-    // Build page lookup map for link conversion (ADR-0022)
+    // Build page state and lookup map for link conversion (ADR-0022, ADR-0024)
     // Enable duplicate title warnings during sync
-    const pageLookupMap = buildPageLookupMap(config, true);
+    const pageStateBuildResult = buildPageStateFromFiles(directory, config.pages);
+    result.warnings.push(...pageStateBuildResult.warnings);
+    const pageLookupMap = buildPageLookupMapFromCache(pageStateBuildResult, true);
 
     // Process each page
     let currentChange = 0;
@@ -160,9 +164,11 @@ export async function syncSpecificPages(
         const fullPage = await client.getPage(change.pageId, true);
         const labels = await client.getAllLabels(change.pageId);
 
+        // Per ADR-0024: config.pages[id] is just localPath, get parent title from path
         let parentTitle: string | undefined;
-        if (fullPage.parentId && config.pages[fullPage.parentId]) {
-          parentTitle = config.pages[fullPage.parentId].localPath.split('/').pop()?.replace('.md', '');
+        const parentLocalPath = fullPage.parentId ? config.pages[fullPage.parentId] : undefined;
+        if (parentLocalPath) {
+          parentTitle = parentLocalPath.split('/').pop()?.replace('.md', '');
         }
 
         // Get author and last modifier user information (cached)
@@ -189,14 +195,9 @@ export async function syncSpecificPages(
         mkdirSync(dirname(fullPath), { recursive: true });
         writeFileSync(fullPath, markdown, 'utf-8');
 
-        const syncInfo: PageSyncInfo = {
-          pageId: change.pageId,
-          version: fullPage.version?.number || 1,
-          lastModified: fullPage.version?.createdAt,
-          localPath,
-          title: fullPage.title, // Store title for link conversion (ADR-0022)
-        };
-        config = updatePageSyncInfo(config, syncInfo);
+        // Per ADR-0024: Only store pageId -> localPath mapping
+        // Version, title, timestamps are in frontmatter
+        config = updatePageSyncInfo(config, { pageId: change.pageId, localPath });
         writeSpaceConfig(directory, config);
 
         progress?.onPageComplete?.(currentChange, totalChanges, change.title, localPath);

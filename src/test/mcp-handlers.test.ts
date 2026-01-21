@@ -23,23 +23,14 @@ describe('MCP Handlers', () => {
     testDir = join(tmpdir(), `cn-mcp-test-${Date.now()}`);
     mkdirSync(testDir, { recursive: true });
 
+    // Per ADR-0024: pages is now Record<string, string> (pageId -> localPath)
     spaceConfig = {
       spaceKey: 'TEST',
       spaceId: 'space-123',
       spaceName: 'Test Space',
       pages: {
-        'page-123': {
-          pageId: 'page-123',
-          version: 1,
-          localPath: 'docs/test-page.md',
-          title: 'Test Page',
-        },
-        'page-456': {
-          pageId: 'page-456',
-          version: 2,
-          localPath: 'other/another-page.md',
-          title: 'Another Page',
-        },
+        'page-123': 'docs/test-page.md',
+        'page-456': 'other/another-page.md',
       },
     };
 
