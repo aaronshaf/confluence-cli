@@ -142,7 +142,7 @@ describe('EXIT_CODES', () => {
     expect(EXIT_CODES.INVALID_ARGUMENTS).toBe(6);
     expect(EXIT_CODES.PAGE_NOT_FOUND).toBe(7);
     expect(EXIT_CODES.VERSION_CONFLICT).toBe(8);
-    expect(EXIT_CODES.FOLDER_NOT_FOUND).toBe(11);
+    expect(EXIT_CODES.FOLDER_NOT_FOUND).toBe(9);
   });
 });
 

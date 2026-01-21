@@ -34,17 +34,6 @@ const FolderSyncInfoSchema = Schema.Struct({
 });
 
 /**
- * Search configuration schema for Meilisearch integration
- */
-const SearchConfigSchema = Schema.Struct({
-  meilisearchUrl: Schema.optional(Schema.String),
-  apiKey: Schema.optional(Schema.NullOr(Schema.String)),
-  indexName: Schema.optional(Schema.String),
-});
-
-export type SearchConfig = Schema.Schema.Type<typeof SearchConfigSchema>;
-
-/**
  * Folder sync information stored in .confluence.json
  * Per ADR-0023: Folder push workflow support
  */
@@ -76,7 +65,6 @@ const SpaceConfigWithStateSchema = Schema.Struct({
   syncState: Schema.optional(Schema.Record({ key: Schema.String, value: Schema.Any })),
   pages: Schema.Record({ key: Schema.String, value: Schema.String }), // pageId -> localPath
   folders: Schema.optional(Schema.Record({ key: Schema.String, value: FolderSyncInfoSchema })),
-  search: Schema.optional(SearchConfigSchema),
 });
 
 /**

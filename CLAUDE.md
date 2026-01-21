@@ -18,8 +18,6 @@ Product specifications and design documents:
 | `architecture.md` | Technical architecture and component design |
 | `commands.md` | CLI command specifications |
 | `data-model.md` | Data structures, schemas, file formats |
-| `search.md` | Search feature PRD (Meilisearch integration) |
-| `mcp.md` | MCP server PRD (Model Context Protocol integration) |
 
 ### `docs/adr/` - Architecture Decision Records
 
@@ -47,7 +45,6 @@ Records of significant architectural decisions with context and rationale:
 | `0018-confluence-folder-support.md` | V2 API folder discovery for hierarchy |
 | `0019-sync-modes.md` | Smart vs full sync modes |
 | `0020-bidirectional-sync-push.md` | Push command for bidirectional sync |
-| `0021-use-meilisearch-for-local-search.md` | Meilisearch for local search |
 | `0024-frontmatter-source-of-truth.md` | Frontmatter as source of truth for sync state |
 
 ## Style
@@ -73,8 +70,6 @@ cn push      # Push local file to Confluence
 cn status    # Check connection and sync status
 cn tree      # Display page hierarchy
 cn open      # Open page in browser
-cn search    # Search indexed content (requires Meilisearch)
-cn mcp       # Start MCP server for AI assistant integration
 ```
 
 ## Key Files
