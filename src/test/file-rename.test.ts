@@ -160,4 +160,146 @@ title: "New Guide Name"
     expect(result.finalPath).toBe('guides/new-guide-name.md');
     expect(existsSync(join(subDir, 'new-guide-name.md'))).toBe(true);
   });
+
+  test('updates references in other files when renamed with spaceRoot', () => {
+    // Create a file that links to another file
+    const linkingFile = join(testDir, 'index.md');
+    writeFileSync(
+      linkingFile,
+      `---
+title: Index
+---
+
+See [Old Guide](./old-guide.md) for details.
+`,
+    );
+
+    // Create the file that will be renamed
+    const filePath = join(testDir, 'old-guide.md');
+    const content = `---
+title: "New Guide Name"
+---
+
+# New Guide Name
+`;
+    writeFileSync(filePath, content);
+
+    // Rename with spaceRoot to trigger reference updates
+    const result = handleFileRename(filePath, 'old-guide.md', 'New Guide Name', content, testDir);
+
+    expect(result.wasRenamed).toBe(true);
+    expect(result.finalPath).toBe('new-guide-name.md');
+
+    // Verify the link in the other file was updated
+    const linkingContent = readFileSync(linkingFile, 'utf-8');
+    expect(linkingContent).toContain('./new-guide-name.md');
+    expect(linkingContent).not.toContain('./old-guide.md');
+  });
+
+  test('updates references without ./ prefix when renamed with spaceRoot', () => {
+    // Create a file that links without ./ prefix
+    const linkingFile = join(testDir, 'README.md');
+    writeFileSync(
+      linkingFile,
+      `---
+title: README
+---
+
+See [Guide](old-guide.md) for details.
+`,
+    );
+
+    // Create the file that will be renamed
+    const filePath = join(testDir, 'old-guide.md');
+    const content = `---
+title: "New Guide Name"
+---
+
+# New Guide Name
+`;
+    writeFileSync(filePath, content);
+
+    // Rename with spaceRoot to trigger reference updates
+    const result = handleFileRename(filePath, 'old-guide.md', 'New Guide Name', content, testDir);
+
+    expect(result.wasRenamed).toBe(true);
+
+    // Verify the link was updated (preserving no-prefix style)
+    const linkingContent = readFileSync(linkingFile, 'utf-8');
+    expect(linkingContent).toContain('new-guide-name.md');
+    expect(linkingContent).not.toContain('old-guide.md');
+  });
+
+  test('updates references in subdirectory files when renamed with spaceRoot', () => {
+    // Create subdirectory
+    const docsDir = join(testDir, 'docs');
+    mkdirSync(docsDir);
+
+    // Create a file in subdirectory that links to root file
+    const linkingFile = join(docsDir, 'guide.md');
+    writeFileSync(
+      linkingFile,
+      `---
+title: Guide
+---
+
+See [Overview](../overview.md) for details.
+`,
+    );
+
+    // Create the file that will be renamed (at root)
+    const filePath = join(testDir, 'overview.md');
+    const content = `---
+title: "Project Overview"
+---
+
+# Project Overview
+`;
+    writeFileSync(filePath, content);
+
+    // Rename with spaceRoot to trigger reference updates
+    const result = handleFileRename(filePath, 'overview.md', 'Project Overview', content, testDir);
+
+    expect(result.wasRenamed).toBe(true);
+    expect(result.finalPath).toBe('project-overview.md');
+
+    // Verify the relative link in subdirectory file was updated
+    const linkingContent = readFileSync(linkingFile, 'utf-8');
+    expect(linkingContent).toContain('../project-overview.md');
+    expect(linkingContent).not.toContain('../overview.md');
+  });
+
+  test('does not update references when no spaceRoot provided', () => {
+    // Create a file that links to another file
+    const linkingFile = join(testDir, 'index.md');
+    writeFileSync(
+      linkingFile,
+      `---
+title: Index
+---
+
+See [Old Guide](./old-guide.md) for details.
+`,
+    );
+
+    // Create the file that will be renamed
+    const filePath = join(testDir, 'old-guide.md');
+    const content = `---
+title: "New Guide Name"
+---
+
+# New Guide Name
+`;
+    writeFileSync(filePath, content);
+
+    // Rename WITHOUT spaceRoot - should not update references
+    const result = handleFileRename(filePath, 'old-guide.md', 'New Guide Name', content);
+
+    expect(result.wasRenamed).toBe(true);
+
+    // Verify the link in the other file was NOT updated (no spaceRoot)
+    const linkingContent = readFileSync(linkingFile, 'utf-8');
+    expect(linkingContent).toContain('./old-guide.md');
+    expect(linkingContent).not.toContain('./new-guide-name.md');
+  });
 });

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted (Updated January 2026)
 
 ## Context
 
@@ -10,8 +10,6 @@ ADR-0020 established the push command for pushing markdown files to Confluence. 
 
 1. Manually create folders in Confluence first
 2. Specify `parent_id` in frontmatter pointing to an existing page/folder
-
-Additionally, the Confluence v2 API has a limitation: creating pages with a folder as `parentId` doesn't work - the folder parent is silently ignored and the page is created at the space root.
 
 ## Decision
 
@@ -21,7 +19,7 @@ Implement automatic folder hierarchy creation during push:
 
 2. **Track folders in config**: Store folder mappings in `.confluence.json` so subsequent pushes can reuse existing folders.
 
-3. **Use move workaround**: Since the v2 API can't create pages directly under folders, create the page first (at space root), then use the v1 Move API to relocate it into the folder.
+3. **Direct folder parenting**: The Confluence v2 API supports creating pages directly under folders by passing the folder ID as `parentId`.
 
 4. **User confirmation**: Prompt for y/n confirmation before creating each folder to prevent unintended changes.
 
@@ -63,8 +61,6 @@ Creating: endpoints
   Creating folder: api...
   Created folder: api (id: 789012)
   Creating page on Confluence...
-  Moving page into folder...
-  Moved page to folder
 
 Created: endpoints (page_id: 345678)
 ```
@@ -94,31 +90,34 @@ POST /wiki/api/v2/folders
 }
 ```
 
-### Move Page (v1 API)
+### Create Page with Folder Parent (v2 API)
 
 ```
-PUT /wiki/rest/api/content/{pageId}/move/append/{targetFolderId}
+POST /wiki/api/v2/pages
+{
+  "spaceId": "123",
+  "title": "Page Name",
+  "parentId": "folder-id",  // Can be a folder ID
+  "body": { ... }
+}
 ```
 
-The v1 Move API is used because:
-- The v2 API doesn't support setting folder parents during page creation
-- Move operation reliably places pages under folders
+The v2 API supports creating pages directly under folders by passing the folder ID as `parentId`.
 
 ## Edge Cases
 
 | Case | Handling |
 |------|----------|
 | Folder already exists (by path) | Reuse existing folder ID from config |
-| Folder deleted on Confluence | Warn user; page remains at space root. Intended `parent_id` preserved for retry. |
-| Move operation fails | Warn user; page created but at space root. Intended `parent_id` preserved for retry. |
+| Folder already exists on Confluence | Detect via search, add to local config, reuse |
+| Folder deleted on Confluence | Error during page creation; user notified |
 | Explicit `parent_id` in frontmatter | Skip auto-folder creation, use explicit parent |
 | Root-level files | No folder creation needed |
 | Deeply nested directories | Create folders iteratively from root to leaf (max 10 levels) |
 | User declines folder creation | Abort push with error message |
-| Duplicate folder title | Error with suggestion to run `cn pull` to sync existing folders |
+| Duplicate folder title | Search detects existing folder, reuses it |
 | Path traversal (e.g., `../`) | Rejected with validation error |
 | Invalid characters in folder name | Sanitized (special chars replaced with `-`) |
-| Circular reference in hierarchy | Warning logged; path truncated to prevent infinite loop |
 | Rate limiting (429) | Automatic retry with exponential backoff |
 
 ## Rationale
@@ -135,12 +134,6 @@ The v1 Move API is used because:
 - Fast lookup: find folder ID by local path without API calls
 - Pull integration: folders discovered during pull are tracked for push
 
-### Why the create-then-move approach?
-
-- Confluence v2 API limitation: parentId for folders is ignored during page creation
-- Move API works reliably for placing pages under folders
-- Two-step approach is more robust than trying to work around API limitations
-
 ### Why prompt for each folder?
 
 - Safety: prevents accidentally creating many folders
@@ -155,20 +148,22 @@ The v1 Move API is used because:
 - Folder structure automatically mirrors local directory structure
 - Folders are tracked and reused across push/pull operations
 - Clear prompts prevent unintended folder creation
+- Direct folder parenting is efficient (single API call)
 
 ### Negative
 
-- Additional API calls for folder creation and page move
-- Two-step create-then-move is slower than direct creation would be
+- Additional API calls for folder creation
 - Users may be surprised by folder prompts if they expect silent operation
 
 ## Implementation Files
 
 | File | Changes |
 |------|---------|
-| `src/lib/confluence-client/types.ts` | Add `CreateFolderRequestSchema`, `MovePageResponseSchema` |
-| `src/lib/confluence-client/client.ts` | Add `createFolder()`, `movePage()` methods |
+| `src/lib/confluence-client/types.ts` | Add `CreateFolderRequestSchema`, `FolderSchema` |
+| `src/lib/confluence-client/client.ts` | Add `createFolder()`, `findFolderByTitle()` methods |
+| `src/lib/confluence-client/folder-operations.ts` | Folder API operations |
 | `src/lib/space-config.ts` | Add `FolderSyncInfo`, `folders` field, helper functions |
-| `src/cli/commands/push.ts` | Add `ensureFolderHierarchy()`, update `createNewPage()` |
+| `src/cli/commands/push.ts` | Update `createNewPage()` to use folder parentId |
+| `src/cli/commands/folder-hierarchy.ts` | `ensureFolderHierarchy()` function |
 | `src/lib/sync/sync-engine.ts` | Track folders in config during pull |
 | `src/lib/errors.ts` | Add `FolderNotFoundError` |

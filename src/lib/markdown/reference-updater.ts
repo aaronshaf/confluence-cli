@@ -115,6 +115,7 @@ function updateReferencesInFile(
     const newLinkFromFile = relative(fileDir, newAbsolutePath);
 
     // Links in markdown may or may not have ./ prefix, so we need to check both forms
+    // Paths starting with . (including ./ and ../) are kept as-is; others get ./ prefix added
     const oldLinkWithPrefix = oldLinkFromFile.startsWith('.')
       ? oldLinkFromFile
       : `${RELATIVE_PREFIX}${oldLinkFromFile}`;

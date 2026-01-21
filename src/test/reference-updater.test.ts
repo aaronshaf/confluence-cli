@@ -283,7 +283,11 @@ See [Guide](docs/guide.md) and also [Guide Again](./docs/guide.md).
     expect(results[0].updatedCount).toBe(2);
 
     const content = readFileSync(join(testDir, 'index.md'), 'utf-8');
-    expect(content).toContain('docs/user-guide.md');
+    // Verify both links were updated
     expect(content).not.toContain('docs/guide.md');
+    // Verify prefix style is preserved: non-prefixed stays non-prefixed
+    expect(content).toContain('[Guide](docs/user-guide.md)');
+    // Verify prefix style is preserved: prefixed stays prefixed
+    expect(content).toContain('[Guide Again](./docs/user-guide.md)');
   });
 });
