@@ -264,8 +264,9 @@ async function pushBatch(
         pushedPages.push(result.pageInfo);
       }
     } catch (error) {
-      // Don't exit on individual failures in batch mode
-      // PushError/FolderHierarchyError already printed their message, other errors need printing
+      // Don't exit on individual failures in batch mode - continue with remaining files.
+      // PushError and FolderHierarchyError print their own user-friendly messages before throwing,
+      // so we only need to print the error message for unexpected errors.
       if (!(error instanceof PushError) && !(error instanceof FolderHierarchyError)) {
         console.error(chalk.red(`  Failed: ${error instanceof Error ? error.message : 'Unknown error'}`));
       }

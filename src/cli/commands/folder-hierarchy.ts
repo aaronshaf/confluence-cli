@@ -204,8 +204,14 @@ export async function ensureFolderHierarchy(
 }
 
 /**
- * Determine expected parent ID based on file's folder location
- * Reuses ensureFolderHierarchy logic to find or create the parent folder
+ * Determine expected parent ID based on file's folder location.
+ *
+ * This is a semantic wrapper around ensureFolderHierarchy for use when updating
+ * existing pages. It answers: "What parent should this page have based on its
+ * current local file path?" - creating any missing folders in the process.
+ *
+ * For new pages, use ensureFolderHierarchy directly.
+ * For existing pages being moved, use this function to determine target parent.
  *
  * @param client - Confluence client
  * @param spaceConfig - Current space configuration

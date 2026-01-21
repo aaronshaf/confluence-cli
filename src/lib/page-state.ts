@@ -135,6 +135,9 @@ export function getPageInfoByPath(directory: string, localPath: string): FullPag
       syncedAt: frontmatter.synced_at,
     };
   } catch {
+    // Return null for any parse errors (malformed YAML, encoding issues, etc.)
+    // This is intentional - callers treat unreadable files the same as files without page_id.
+    // Use buildPageStateFromFiles() instead if you need detailed error reporting.
     return null;
   }
 }

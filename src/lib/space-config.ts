@@ -115,6 +115,10 @@ export function readSpaceConfig(directory: string): SpaceConfigWithState | null 
     const parsed = JSON.parse(content);
 
     // Check for legacy format and migrate if needed (ADR-0024)
+    // Note: If multiple processes read the config simultaneously during migration,
+    // both may attempt to write. This is acceptable for a CLI tool since:
+    // 1. Migration is idempotent (same result regardless of which write wins)
+    // 2. Concurrent CLI invocations on the same space are rare in practice
     if (parsed.pages && Object.keys(parsed.pages).length > 0 && isLegacyFormat(parsed.pages)) {
       const migratedPages = migrateLegacyPages(parsed.pages);
       const migrated = { ...parsed, pages: migratedPages };
