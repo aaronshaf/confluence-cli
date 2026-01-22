@@ -39,8 +39,8 @@ export async function setup(): Promise<void> {
       },
     });
 
-    // Normalize URL (remove trailing slash)
-    confluenceUrl = confluenceUrl.replace(/\/$/, '');
+    // Normalize URL (remove trailing slashes)
+    confluenceUrl = confluenceUrl.replace(/\/+$/, '');
     break;
   }
 
