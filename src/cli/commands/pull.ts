@@ -41,9 +41,10 @@ function createProgressReporter(): SyncProgressReporter {
     onPageStart: (_index, _total, _title, _type) => {
       // No-op - we show progress on complete only
     },
-    onPageComplete: (_index, _total, _title, localPath) => {
+    onPageComplete: (index, total, _title, localPath) => {
       const icon = localPath ? chalk.green('✓') : chalk.red('×');
-      console.log(`  ${icon} ${localPath || 'deleted'}`);
+      const progress = chalk.gray(`(${index}/${total})`);
+      console.log(`  ${icon} ${progress} ${localPath || 'deleted'}`);
     },
     onPageError: (title, error) => {
       console.log(`  ${chalk.red('✗')} ${title}: ${error}`);
