@@ -210,13 +210,22 @@ export function sortByDependencies(
       }
     }
 
-    // Add remaining candidates to sorted output (in their original order)
-    // so they still get pushed even if they're in cycles
-    for (const path of remainingPaths) {
-      const candidate = candidateMap.get(path);
-      if (candidate) {
-        sorted.push(candidate);
-      }
+    // Add remaining candidates to sorted output, prioritizing new pages first
+    // so they get created and receive page_ids before modified pages are pushed.
+    // This allows modified pages to resolve links to the newly created pages.
+    const remainingCandidates = remainingPaths
+      .map((path) => candidateMap.get(path))
+      .filter((c): c is PushCandidate => c !== undefined)
+      .sort((a, b) => {
+        // New pages first, then modified
+        if (a.type === 'new' && b.type !== 'new') return -1;
+        if (a.type !== 'new' && b.type === 'new') return 1;
+        // Within same type, preserve original order (alphabetical)
+        return remainingPaths.indexOf(a.path) - remainingPaths.indexOf(b.path);
+      });
+
+    for (const candidate of remainingCandidates) {
+      sorted.push(candidate);
     }
   }
 

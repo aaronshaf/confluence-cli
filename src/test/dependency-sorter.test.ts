@@ -332,5 +332,53 @@ Then read [guide](guide.md) for details.
       expect(cycles).toEqual([]);
       expect(sorted).toHaveLength(2);
     });
+
+    test('prioritizes new pages before modified pages in cycles', () => {
+      // Create circular dependency: modified -> new -> modified
+      // The new page should be pushed first so it gets a page_id,
+      // allowing the modified page to resolve links to it
+      mkdirSync(join(testDir, 'getting-started'));
+      mkdirSync(join(testDir, 'tools'));
+
+      writeFileSync(join(testDir, 'getting-started', 'onboarding.md'), '# Onboarding\nSee [CLI](../tools/cli.md)');
+      writeFileSync(join(testDir, 'tools', 'cli.md'), '# CLI\nSee [Onboarding](../getting-started/onboarding.md)');
+
+      const candidates: PushCandidate[] = [
+        { path: 'getting-started/onboarding.md', type: 'modified', title: 'Onboarding', pageId: '123' },
+        { path: 'tools/cli.md', type: 'new', title: 'CLI' },
+      ];
+
+      const { sorted, cycles } = sortByDependencies(candidates, testDir);
+
+      // Should detect the cycle
+      expect(cycles.length).toBeGreaterThan(0);
+      // Both files should be in output
+      expect(sorted).toHaveLength(2);
+      // New page should come FIRST (before modified) so it gets created first
+      expect(sorted[0].type).toBe('new');
+      expect(sorted[0].path).toBe('tools/cli.md');
+      expect(sorted[1].type).toBe('modified');
+      expect(sorted[1].path).toBe('getting-started/onboarding.md');
+    });
+
+    test('maintains alphabetical order within same type in cycles', () => {
+      // All new pages in a cycle should maintain alphabetical order
+      writeFileSync(join(testDir, 'c.md'), '# C\nSee [A](a.md)');
+      writeFileSync(join(testDir, 'a.md'), '# A\nSee [B](b.md)');
+      writeFileSync(join(testDir, 'b.md'), '# B\nSee [C](c.md)');
+
+      const candidates: PushCandidate[] = [
+        { path: 'c.md', type: 'new', title: 'C' },
+        { path: 'a.md', type: 'new', title: 'A' },
+        { path: 'b.md', type: 'new', title: 'B' },
+      ];
+
+      const { sorted, cycles } = sortByDependencies(candidates, testDir);
+
+      expect(cycles.length).toBeGreaterThan(0);
+      // All same type (new), should preserve original order from candidates array
+      // Original order is c, a, b
+      expect(sorted.map((c) => c.path)).toEqual(['c.md', 'a.md', 'b.md']);
+    });
   });
 });
