@@ -89,7 +89,7 @@ export async function cloneCommand(options: CloneCommandOptions): Promise<void> 
         if (deleted.length > 0) parts.push(`${deleted.length} deleted`);
         console.log(chalk.green(`✓ Clone complete: ${parts.join(', ')}`));
       }
-    } catch (syncError) {
+    } catch (_syncError) {
       // Sync failed but clone succeeded - don't clean up, provide recovery guidance
       console.log('');
       console.log(chalk.yellow('Initial pull failed. You can retry with:'));
