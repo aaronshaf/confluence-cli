@@ -61,6 +61,10 @@ bun run cn --help
 bun test
 ```
 
+## See also
+
+- [pchuri/confluence-cli](https://github.com/pchuri/confluence-cli)
+
 ## License
 
 MIT
