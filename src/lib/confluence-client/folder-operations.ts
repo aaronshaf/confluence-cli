@@ -119,6 +119,47 @@ export function createFolderEffect(
 }
 
 /**
+ * Delete a folder by ID (Effect version)
+ */
+export function deleteFolderEffect(
+  baseUrl: string,
+  authHeader: string,
+  folderId: string,
+): Effect.Effect<void, ApiError | AuthError | NetworkError | RateLimitError | FolderNotFoundError> {
+  const makeRequest = Effect.tryPromise({
+    try: async () => {
+      const url = `${baseUrl}/wiki/api/v2/folders/${folderId}`;
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: { Authorization: authHeader, Accept: 'application/json' },
+      });
+
+      if (response.status === 404) throw new FolderNotFoundError(folderId);
+      if (response.status === 401) throw new AuthError('Invalid credentials', 401);
+      if (response.status === 403) throw new AuthError('Access denied', 403);
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After');
+        throw new RateLimitError('Rate limited', retryAfter ? Number.parseInt(retryAfter, 10) : undefined);
+      }
+      if (!response.ok) throw new ApiError(`API error: ${response.status}`, response.status);
+    },
+    catch: (error) => {
+      if (
+        error instanceof FolderNotFoundError ||
+        error instanceof AuthError ||
+        error instanceof ApiError ||
+        error instanceof RateLimitError
+      ) {
+        return error;
+      }
+      return new NetworkError(`Network error: ${error}`);
+    },
+  });
+
+  return pipe(makeRequest, Effect.retry(rateLimitRetrySchedule));
+}
+
+/**
  * Move a page to a new parent (Effect version)
  * Uses v1 API: PUT /wiki/rest/api/content/{id}/move/{position}/{targetId}
  * Returns void since response structure varies and is not needed by callers

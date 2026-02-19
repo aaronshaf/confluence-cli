@@ -12,6 +12,7 @@ import {
 } from '../errors.js';
 import {
   createFolderEffect as createFolderEffectFn,
+  deleteFolderEffect as deleteFolderEffectFn,
   findFolderByTitle as findFolderByTitleFn,
   getFolderEffect as getFolderEffectFn,
   movePageEffect as movePageEffectFn,
@@ -480,6 +481,20 @@ export class ConfluenceClient {
   }
 
   /**
+   * Delete a folder by ID (Effect version)
+   */
+  deleteFolderEffect(
+    folderId: string,
+  ): Effect.Effect<void, ApiError | AuthError | NetworkError | RateLimitError | FolderNotFoundError> {
+    return deleteFolderEffectFn(this.baseUrl, this.authHeader, folderId);
+  }
+
+  /** Delete a folder by ID (async version) */
+  async deleteFolder(folderId: string): Promise<void> {
+    return Effect.runPromise(this.deleteFolderEffect(folderId));
+  }
+
+  /**
    * Find a folder by title in a space
    * Uses v1 CQL search API to find folders by title
    * @param spaceKey - Space key to search in
@@ -514,13 +529,14 @@ export class ConfluenceClient {
   searchEffect(
     cql: string,
     limit = 10,
+    start = 0,
   ): Effect.Effect<SearchResponse, ApiError | AuthError | NetworkError | RateLimitError> {
-    return searchEffectFn(this.baseUrl, this.authHeader, cql, limit);
+    return searchEffectFn(this.baseUrl, this.authHeader, cql, limit, start);
   }
 
   /** Search pages using CQL (async version) */
-  async search(cql: string, limit = 10): Promise<SearchResponse> {
-    return Effect.runPromise(this.searchEffect(cql, limit));
+  async search(cql: string, limit = 10, start = 0): Promise<SearchResponse> {
+    return Effect.runPromise(this.searchEffect(cql, limit, start));
   }
 
   // ================== Comments API ==================

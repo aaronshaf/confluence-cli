@@ -21,8 +21,9 @@ export function searchEffect(
   authHeader: string,
   cql: string,
   limit = 10,
+  start = 0,
 ): Effect.Effect<SearchResponse, ApiError | AuthError | NetworkError | RateLimitError> {
-  const url = `${baseUrl}/wiki/rest/api/search?cql=${encodeURIComponent(cql)}&limit=${limit}`;
+  const url = `${baseUrl}/wiki/rest/api/search?cql=${encodeURIComponent(cql)}&limit=${limit}&start=${start}`;
 
   const makeRequest = Effect.tryPromise({
     try: async () => {

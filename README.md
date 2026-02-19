@@ -34,7 +34,6 @@ Credentials are stored in `~/.cn/config.json`. Space configuration is saved to `
 | `cn setup` | Configure Confluence credentials |
 | `cn clone <SPACE_KEY>` | Clone a space to a new folder |
 | `cn pull` | Pull changes from Confluence as markdown |
-| `cn push [file]` | Push local markdown file(s) to Confluence |
 | `cn status` | Check connection and sync status |
 | `cn tree` | Display page hierarchy |
 | `cn open [page]` | Open page in browser |
@@ -48,6 +47,7 @@ Credentials are stored in `~/.cn/config.json`. Space configuration is saved to `
 | `cn labels <id\|file>` | Manage page labels |
 | `cn move <id\|file> <parentId>` | Move a page to a new parent |
 | `cn attachments <id\|file>` | Manage page attachments |
+| `cn folder <subcommand>` | Manage folders (create, list, delete, move) |
 
 Run `cn <command> --help` for details on each command.
 

@@ -89,41 +89,6 @@ ${chalk.yellow('Examples:')}
 `);
 }
 
-export function showPushHelp(): void {
-  console.log(`
-${chalk.bold('cn push - Push local markdown files to Confluence')}
-
-${chalk.yellow('Usage:')}
-  cn push [file] [options]
-
-${chalk.yellow('Description:')}
-  Push local markdown files to Confluence.
-
-  With a file argument: pushes that single file.
-  Without arguments: scans for changed files and prompts y/n for each.
-
-${chalk.yellow('Arguments:')}
-  file                      Path to markdown file (optional)
-
-${chalk.yellow('Options:')}
-  --force                   Ignore version conflicts and overwrite
-  --dry-run                 Preview changes without pushing
-  --help                    Show this help message
-
-${chalk.yellow('Examples:')}
-  cn push                          Scan and prompt for all changed files
-  cn push --dry-run                Preview what would be pushed
-  cn push ./docs/page.md           Push single page
-  cn push ./docs/page.md --force   Force push (ignore version conflict)
-
-${chalk.yellow('Notes:')}
-  - New files (no page_id) will be created on Confluence
-  - Modified files are detected by comparing file mtime vs synced_at
-  - Only basic markdown elements are fully supported
-  - Files are automatically renamed to match page titles (except index.md/README.md)
-`);
-}
-
 export function showStatusHelp(): void {
   console.log(`
 ${chalk.bold('cn status - Check connection and sync status')}
@@ -316,6 +281,35 @@ ${chalk.yellow('Options:')}
 `);
 }
 
+export function showFolderHelp(): void {
+  console.log(`
+${chalk.bold('cn folder - Manage Confluence folders')}
+
+${chalk.yellow('Usage:')}
+  cn folder <subcommand> [options]
+
+${chalk.yellow('Subcommands:')}
+  create <title>            Create a new folder
+  list                      List folders in a space
+  delete <id>               Delete a folder
+  move <id> <parentId>      Move a folder to a new parent
+
+${chalk.yellow('Options:')}
+  --space <key>             Space key (required for create/list if not in cloned dir)
+  --parent <id>             Parent folder ID (for create)
+  --force                   Skip confirmation prompt (for delete)
+  --xml                     Output in XML format (for list)
+  --help                    Show this help message
+
+${chalk.yellow('Examples:')}
+  cn folder create "My Folder" --space DOCS
+  cn folder create "Nested" --space DOCS --parent 123456
+  cn folder list --space DOCS
+  cn folder delete 123456
+  cn folder move 123456 789012
+`);
+}
+
 export function showMoveHelp(): void {
   console.log(`
 ${chalk.bold('cn move - Move a page to a new parent')}
@@ -386,7 +380,7 @@ ${chalk.yellow('Commands:')}
   cn setup                  Configure Confluence credentials
   cn clone                  Clone a space to a new folder
   cn pull                   Pull space to local folder
-  cn push                   Push local file to Confluence
+  cn folder                 Manage Confluence folders
   cn status                 Check connection and sync status
   cn tree                   Display page hierarchy
   cn open                   Open page in browser

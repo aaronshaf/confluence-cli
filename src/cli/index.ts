@@ -16,8 +16,8 @@ import {
   showLabelsHelp,
   showMoveHelp,
   showOpenHelp,
+  showFolderHelp,
   showPullHelp,
-  showPushHelp,
   showSearchHelp,
   showSetupHelp,
   showSpacesHelp,
@@ -34,8 +34,8 @@ import { infoCommand } from './commands/info.js';
 import { labelsCommand } from './commands/labels.js';
 import { moveCommand } from './commands/move.js';
 import { openCommand } from './commands/open.js';
+import { folderCommand } from './commands/folder.js';
 import { pullCommand } from './commands/pull.js';
-import { pushCommand } from './commands/push.js';
 import { searchCommand } from './commands/search.js';
 import { setup } from './commands/setup.js';
 import { spacesCommand } from './commands/spaces.js';
@@ -128,20 +128,18 @@ async function main(): Promise<void> {
         break;
       }
 
-      case 'push': {
-        if (args.includes('--help')) {
-          showPushHelp();
+      case 'folder': {
+        if (args.includes('--help') && !subArgs.find((a) => !a.startsWith('--'))) {
+          showFolderHelp();
           process.exit(EXIT_CODES.SUCCESS);
         }
-
-        // File is optional - if not provided, scan for changes
-        const file = subArgs.find((arg) => !arg.startsWith('--'));
-
-        await pushCommand({
-          file,
-          force: args.includes('--force'),
-          dryRun: args.includes('--dry-run'),
-        });
+        const folderSubcommand = subArgs[0];
+        if (!folderSubcommand || folderSubcommand.startsWith('--')) {
+          showFolderHelp();
+          process.exit(EXIT_CODES.INVALID_ARGUMENTS);
+        }
+        const folderSubArgs = subArgs.slice(1);
+        await folderCommand(folderSubcommand, folderSubArgs, args);
         break;
       }
 
