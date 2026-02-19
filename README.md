@@ -13,21 +13,21 @@ bun install -g @aaronshaf/confluence-cli
 ## Getting Started
 
 ```bash
-# 1. Configure your Confluence credentials
+# Configure your Confluence credentials
 cn setup
 
-# 2. Clone a Confluence space
-cn clone <SPACE_KEY>
+# Search pages
+cn search "authentication"
 
-# 3. Pull pages as markdown
-cd <SPACE_KEY>
-cn pull
+# Open a page in the browser
+cn open "Getting Started"
+
+# Create a page
+cn create "My Page" --space ENG
+
+# List spaces
+cn spaces
 ```
-
-The space key is the identifier in your Confluence URL:
-`https://yoursite.atlassian.net/wiki/spaces/<SPACE_KEY>/...`
-
-Credentials are stored in `~/.cn/config.json`. Space configuration is saved to `.confluence.json` in the synced directory.
 
 ## Commands
 
