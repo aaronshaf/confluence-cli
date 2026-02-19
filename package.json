@@ -1,6 +1,6 @@
 {
   "name": "@aaronshaf/confluence-cli",
-  "version": "0.1.15",
+  "version": "1.0.0",
   "description": "Confluence CLI for syncing spaces and local markdown files",
   "type": "module",
   "bin": {
