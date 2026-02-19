@@ -1,10 +1,12 @@
-# cn
+# confluence-cli
 
-CLI for syncing Confluence spaces to local markdown.
-
-## Install
+## Installation
 
 ```bash
+# Install Bun runtime
+curl -fsSL https://bun.sh/install | bash
+
+# Install confluence-cli
 bun install -g @aaronshaf/confluence-cli
 ```
 
@@ -50,11 +52,6 @@ Credentials are stored in `~/.cn/config.json`. Space configuration is saved to `
 | `cn folder <subcommand>` | Manage folders (create, list, delete, move) |
 
 Run `cn <command> --help` for details on each command.
-
-## Requirements
-
-- Bun 1.2.0+
-- Confluence Cloud account
 
 ## Development
 
