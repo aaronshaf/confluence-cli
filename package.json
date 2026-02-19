@@ -1,5 +1,5 @@
 {
-  "name": "@aaronshaf/cn",
+  "name": "@aaronshaf/confluence-cli",
   "version": "0.1.15",
   "description": "Confluence CLI for syncing spaces and local markdown files",
   "type": "module",
@@ -20,12 +20,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/aaronshaf/cn.git"
+    "url": "https://github.com/aaronshaf/confluence-cli.git"
   },
   "bugs": {
-    "url": "https://github.com/aaronshaf/cn/issues"
+    "url": "https://github.com/aaronshaf/confluence-cli/issues"
   },
-  "homepage": "https://github.com/aaronshaf/cn#readme",
+  "homepage": "https://github.com/aaronshaf/confluence-cli#readme",
   "scripts": {
     "dev": "bun run --watch src/cli.ts",
     "test": "BUN_TEST_JOBS=1 NODE_ENV=test bun test",

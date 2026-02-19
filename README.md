@@ -5,7 +5,7 @@ CLI for syncing Confluence spaces to local markdown.
 ## Install
 
 ```bash
-bun install -g @aaronshaf/cn
+bun install -g @aaronshaf/confluence-cli
 ```
 
 ## Getting Started
@@ -17,7 +17,7 @@ cn setup
 # 2. Clone a Confluence space
 cn clone <SPACE_KEY>
 
-# 3. Pull the pages
+# 3. Pull pages as markdown
 cd <SPACE_KEY>
 cn pull
 ```
@@ -33,8 +33,8 @@ Credentials are stored in `~/.cn/config.json`. Space configuration is saved to `
 |---------|-------------|
 | `cn setup` | Configure Confluence credentials |
 | `cn clone <SPACE_KEY>` | Clone a space to a new folder |
-| `cn pull` | Pull changes from Confluence |
-| `cn push [file]` | Push local file(s) to Confluence |
+| `cn pull` | Pull changes from Confluence as markdown |
+| `cn push [file]` | Push local markdown file(s) to Confluence |
 | `cn status` | Check connection and sync status |
 | `cn tree` | Display page hierarchy |
 | `cn open [page]` | Open page in browser |
