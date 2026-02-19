@@ -1,6 +1,10 @@
 export { ConfluenceClient } from './client.js';
 export type {
+  Attachment,
+  AttachmentsResponse,
   Body,
+  Comment,
+  CommentsResponse,
   ContentItem,
   ContentTreeNode,
   CreateFolderRequest,
@@ -11,6 +15,8 @@ export type {
   Page,
   PagesResponse,
   PageTreeNode,
+  SearchResponse,
+  SearchResultItem,
   Space,
   SpacesResponse,
   UpdatePageRequest,
@@ -18,7 +24,11 @@ export type {
   Version,
 } from './types.js';
 export {
+  AttachmentSchema,
+  AttachmentsResponseSchema,
   BodySchema,
+  CommentSchema,
+  CommentsResponseSchema,
   CreateFolderRequestSchema,
   CreatePageRequestSchema,
   FolderSchema,
@@ -27,6 +37,8 @@ export {
   LabelsResponseSchema,
   PageSchema,
   PagesResponseSchema,
+  SearchResponseSchema,
+  SearchResultItemSchema,
   SpaceSchema,
   SpacesResponseSchema,
   UpdatePageRequestSchema,

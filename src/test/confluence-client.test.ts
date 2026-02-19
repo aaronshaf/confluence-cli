@@ -431,4 +431,105 @@ describe('ConfluenceClient', () => {
       expect(requestCount).toBe(2);
     });
   });
+
+  describe('search', () => {
+    test('returns search results', async () => {
+      const client = new ConfluenceClient(testConfig);
+      const response = await client.search('type=page AND text~"test"');
+      expect(response.results).toBeArray();
+    });
+
+    test('returns empty results for folder-type CQL', async () => {
+      const client = new ConfluenceClient(testConfig);
+      const response = await client.search('type=folder AND space="TEST"');
+      expect(response.results).toBeArray();
+      expect(response.results.length).toBe(0);
+    });
+  });
+
+  describe('getFooterComments', () => {
+    test('returns empty comments by default', async () => {
+      const client = new ConfluenceClient(testConfig);
+      const response = await client.getFooterComments('page-123');
+      expect(response.results).toBeArray();
+      expect(response.results.length).toBe(0);
+    });
+
+    test('returns comments when present', async () => {
+      server.use(
+        http.get('*/wiki/api/v2/pages/:pageId/footer-comments', () => {
+          return HttpResponse.json({
+            results: [
+              {
+                id: 'comment-1',
+                body: { storage: { value: '<p>Test comment</p>', representation: 'storage' } },
+                authorId: 'user-123',
+                createdAt: new Date().toISOString(),
+              },
+            ],
+          });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+      const response = await client.getFooterComments('page-123');
+      expect(response.results.length).toBe(1);
+      expect(response.results[0].id).toBe('comment-1');
+    });
+  });
+
+  describe('getAttachments', () => {
+    test('returns empty attachments by default', async () => {
+      const client = new ConfluenceClient(testConfig);
+      const response = await client.getAttachments('page-123');
+      expect(response.results).toBeArray();
+      expect(response.results.length).toBe(0);
+    });
+  });
+
+  describe('addLabel', () => {
+    test('adds label without throwing', async () => {
+      const client = new ConfluenceClient(testConfig);
+      await client.addLabel('page-123', 'documentation');
+    });
+  });
+
+  describe('removeLabel', () => {
+    test('removes label without throwing', async () => {
+      const client = new ConfluenceClient(testConfig);
+      await client.removeLabel('page-123', 'documentation');
+    });
+  });
+
+  describe('deletePage', () => {
+    test('deletes page without throwing', async () => {
+      const client = new ConfluenceClient(testConfig);
+      await client.deletePage('page-123');
+    });
+
+    test('throws on 404', async () => {
+      server.use(
+        http.delete('*/wiki/api/v2/pages/:pageId', () => {
+          return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+        }),
+      );
+
+      const client = new ConfluenceClient(testConfig);
+      await expect(client.deletePage('nonexistent')).rejects.toThrow();
+    });
+  });
+
+  describe('uploadAttachment', () => {
+    test('uploads attachment without throwing', async () => {
+      const client = new ConfluenceClient(testConfig);
+      await client.uploadAttachment('page-123', 'test.png', Buffer.from('data'), 'image/png');
+    });
+  });
+
+  describe('deleteAttachment', () => {
+    test('deletes attachment without throwing', async () => {
+      const client = new ConfluenceClient(testConfig);
+      await client.deleteAttachment('att-123');
+    });
+  });
 });

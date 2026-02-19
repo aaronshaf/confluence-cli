@@ -1,6 +1,4 @@
-import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { platform } from 'node:os';
 import { join } from 'node:path';
 import chalk from 'chalk';
 import { ConfluenceClient } from '../../lib/confluence-client/index.js';
@@ -8,41 +6,11 @@ import { ConfigManager } from '../../lib/config.js';
 import { EXIT_CODES } from '../../lib/errors.js';
 import { extractPageId } from '../../lib/markdown/index.js';
 import { readSpaceConfig } from '../../lib/space-config.js';
+import { openUrl } from '../utils/browser.js';
 
 export interface OpenCommandOptions {
   page?: string;
   spaceKey?: string;
-}
-
-/**
- * Open a URL in the default browser
- * Uses spawn with arguments array to prevent command injection
- */
-function openUrl(url: string): void {
-  const os = platform();
-  let command: string;
-  let args: string[];
-
-  switch (os) {
-    case 'darwin':
-      command = 'open';
-      args = [url];
-      break;
-    case 'win32':
-      command = 'cmd';
-      args = ['/c', 'start', '', url];
-      break;
-    default:
-      command = 'xdg-open';
-      args = [url];
-  }
-
-  const child = spawn(command, args, { stdio: 'ignore', detached: true });
-  child.on('error', (error) => {
-    console.error(chalk.red(`Failed to open browser: ${error.message}`));
-    console.log(chalk.gray(`URL: ${url}`));
-  });
-  child.unref();
 }
 
 /**

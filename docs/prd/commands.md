@@ -593,6 +593,230 @@ $ cn open 123456
 
 ---
 
+## cn doctor
+
+Health check for synced spaces.
+
+```
+cn doctor [options]
+```
+
+**Options:**
+- `--fix` - Auto-fix issues (delete stale files)
+- `--xml` - Output in XML format
+- `--help` - Show help
+
+**Checks:**
+- Duplicate page_ids (same page in multiple files)
+- Orphaned files (local files without Confluence pages)
+- Version mismatches
+
+---
+
+## cn search
+
+Search pages using Confluence CQL.
+
+```
+cn search <query> [options]
+```
+
+**Arguments:**
+- `query` - Search query string (required)
+
+**Options:**
+- `--space <key>` - Narrow search to a specific space
+- `--limit <n>` - Maximum results (default: 10)
+- `--xml` - Output in XML format
+- `--help` - Show help
+
+**Examples:**
+```bash
+cn search "authentication"
+cn search "api" --space DOCS
+cn search "onboarding" --limit 5
+```
+
+---
+
+## cn spaces
+
+List available Confluence spaces.
+
+```
+cn spaces [options]
+```
+
+**Options:**
+- `--xml` - Output in XML format
+- `--help` - Show help
+
+---
+
+## cn info
+
+Show info and labels for a page.
+
+```
+cn info <id|file> [options]
+```
+
+**Arguments:**
+- `id|file` - Page ID, or path to local markdown file
+
+**Options:**
+- `--xml` - Output in XML format
+- `--help` - Show help
+
+**Examples:**
+```bash
+cn info 123456
+cn info ./docs/my-page.md
+```
+
+---
+
+## cn create
+
+Create a new Confluence page.
+
+```
+cn create <title> [options]
+```
+
+**Arguments:**
+- `title` - Page title (required)
+
+**Options:**
+- `--space <key>` - Space key (required if not in cloned dir)
+- `--parent <id>` - Parent page ID
+- `--open` - Open page in browser after creation
+- `--help` - Show help
+
+**Examples:**
+```bash
+cn create "My New Page" --space DOCS
+cn create "Child Page" --parent 123456
+```
+
+---
+
+## cn delete
+
+Delete a Confluence page.
+
+```
+cn delete <id> [options]
+```
+
+**Arguments:**
+- `id` - Page ID (required)
+
+**Options:**
+- `--force` - Skip confirmation prompt
+- `--help` - Show help
+
+**Examples:**
+```bash
+cn delete 123456
+cn delete 123456 --force
+```
+
+---
+
+## cn comments
+
+Show footer comments for a page.
+
+```
+cn comments <id|file> [options]
+```
+
+**Arguments:**
+- `id|file` - Page ID, or path to local markdown file
+
+**Options:**
+- `--xml` - Output in XML format
+- `--help` - Show help
+
+---
+
+## cn labels
+
+List and manage labels for a page.
+
+```
+cn labels <id|file> [options]
+```
+
+**Arguments:**
+- `id|file` - Page ID, or path to local markdown file
+
+**Options:**
+- `--add <label>` - Add a label
+- `--remove <label>` - Remove a label
+- `--xml` - Output in XML format
+- `--help` - Show help
+
+**Examples:**
+```bash
+cn labels ./docs/my-page.md
+cn labels 123456 --add documentation
+cn labels 123456 --remove draft
+```
+
+---
+
+## cn move
+
+Move a page to a new parent.
+
+```
+cn move <id|file> <parentId> [options]
+```
+
+**Arguments:**
+- `id|file` - Page ID or path to local markdown file
+- `parentId` - Target parent page ID
+
+**Options:**
+- `--help` - Show help
+
+**Examples:**
+```bash
+cn move 123456 789012
+cn move ./docs/my-page.md 789012
+```
+
+---
+
+## cn attachments
+
+Manage attachments for a page.
+
+```
+cn attachments <id|file> [options]
+```
+
+**Arguments:**
+- `id|file` - Page ID, or path to local markdown file
+
+**Options:**
+- `--upload <file>` - Upload a file as attachment
+- `--download <id>` - Download an attachment by ID
+- `--delete <id>` - Delete an attachment by ID
+- `--help` - Show help
+
+**Examples:**
+```bash
+cn attachments 123456
+cn attachments 123456 --upload ./image.png
+cn attachments 123456 --download att-789
+cn attachments 123456 --delete att-789
+```
+
+---
+
 ## Future Commands (Planned)
 
 | Command | Description |

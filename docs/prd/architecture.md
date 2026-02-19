@@ -15,19 +15,33 @@ cn/
 │   │       ├── push.ts           # cn push
 │   │       ├── status.ts         # cn status
 │   │       ├── tree.ts           # cn tree
-│   │       └── open.ts           # cn open
+│   │       ├── open.ts           # cn open
+│   │       ├── doctor.ts         # cn doctor
+│   │       ├── search.ts         # cn search
+│   │       ├── spaces.ts         # cn spaces
+│   │       ├── info.ts           # cn info
+│   │       ├── create.ts         # cn create
+│   │       ├── delete.ts         # cn delete
+│   │       ├── comments.ts       # cn comments
+│   │       ├── labels.ts         # cn labels
+│   │       ├── move.ts           # cn move
+│   │       └── attachments.ts    # cn attachments
 │   ├── lib/
 │   │   ├── config.ts             # ConfigManager (~/.cn/config.json)
+│   │   ├── resolve-page-target.ts # Resolve page ID from file path or ID string
 │   │   ├── confluence-client/
-│   │   │   ├── index.ts          # ConfluenceClient facade
-│   │   │   ├── confluence-client-base.ts
-│   │   │   ├── confluence-client-pages.ts
-│   │   │   ├── confluence-client-spaces.ts
-│   │   │   └── confluence-client-types.ts
+│   │   │   ├── index.ts          # Public exports
+│   │   │   ├── client.ts         # ConfluenceClient class
+│   │   │   ├── types.ts          # Schemas and types
+│   │   │   ├── page-operations.ts    # Page mutations (create, update, delete)
+│   │   │   ├── folder-operations.ts  # Folder mutations (create, move)
+│   │   │   ├── label-operations.ts   # Label mutations (add, remove)
+│   │   │   └── attachment-operations.ts # Attachment operations
 │   │   ├── sync/
 │   │   │   ├── sync-engine.ts    # Core sync logic
-│   │   │   ├── sync-state.ts     # Track sync state
-│   │   │   └── conflict-resolver.ts
+│   │   │   ├── link-resolution-pass.ts
+│   │   │   ├── sync-specific.ts
+│   │   │   └── cleanup.ts
 │   │   ├── markdown/
 │   │   │   ├── converter.ts      # HTML → Markdown (turndown)
 │   │   │   ├── html-converter.ts # Markdown → HTML (marked)
@@ -37,11 +51,10 @@ cn/
 │   │   └── space-config.ts       # .confluence.json handling
 │   └── test/
 │       ├── mocks/
-│       │   ├── server.ts         # MSW setup
+│       │   ├── setup-msw.ts      # MSW server setup
 │       │   └── handlers.ts       # API mock handlers
-│       └── fixtures/
-│           └── confluence-api-responses.ts
-├── prd/                          # PRD documents
+│       └── msw-schema-validation.ts  # Schema validation helpers
+├── docs/                         # Documentation
 ├── package.json
 ├── tsconfig.json
 ├── biome.json
@@ -83,14 +96,24 @@ class ConfluenceClient extends ConfluenceClientBase {
 **API Endpoints:**
 - `GET /wiki/api/v2/spaces` - List spaces
 - `GET /wiki/api/v2/spaces/{id}` - Get space details
-- `GET /wiki/api/v2/pages` - List pages (with pagination)
+- `GET /wiki/api/v2/spaces/{id}/pages` - List pages in space (with pagination)
 - `GET /wiki/api/v2/pages/{id}` - Get page content
 - `GET /wiki/api/v2/pages/{id}/children` - Get child pages
 - `GET /wiki/api/v2/pages/{id}/labels` - Get page labels
+- `GET /wiki/api/v2/pages/{id}/footer-comments` - Get page comments
+- `GET /wiki/api/v2/pages/{id}/attachments` - Get page attachments
 - `GET /wiki/api/v2/folders/{id}` - Get folder details (discovered via page parentIds)
-- `GET /wiki/api/v2/users/{accountId}` - Get user details (for author names and emails)
 - `POST /wiki/api/v2/pages` - Create new page
 - `PUT /wiki/api/v2/pages/{id}` - Update existing page
+- `DELETE /wiki/api/v2/pages/{id}` - Delete a page
+- `DELETE /wiki/api/v2/attachments/{id}` - Delete an attachment
+- `POST /wiki/api/v2/folders` - Create a folder
+- `GET /wiki/rest/api/user` - Get user details (v1 API fallback)
+- `GET /wiki/rest/api/search` - Search using CQL
+- `POST /wiki/rest/api/content/{id}/label` - Add label (v1 API)
+- `DELETE /wiki/rest/api/content/{id}/label/{name}` - Remove label (v1 API)
+- `PUT /wiki/rest/api/content/{id}/move/{position}/{targetId}` - Move page (v1 API)
+- `POST /wiki/rest/api/content/{id}/child/attachment` - Upload attachment (v1 API)
 
 **Authentication:**
 - Basic Auth: `email:apiToken` base64 encoded

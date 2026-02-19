@@ -223,6 +223,96 @@ export const CreateFolderRequestSchema = Schema.Struct({
 export type CreateFolderRequest = Schema.Schema.Type<typeof CreateFolderRequestSchema>;
 
 /**
+ * Comment information from Confluence API v2
+ */
+export const CommentSchema = Schema.Struct({
+  id: Schema.String,
+  status: Schema.optional(Schema.String),
+  title: Schema.optional(Schema.String),
+  body: Schema.optional(BodySchema),
+  version: Schema.optional(VersionSchema),
+  authorId: Schema.optional(Schema.String),
+  createdAt: Schema.optional(Schema.String),
+});
+export type Comment = Schema.Schema.Type<typeof CommentSchema>;
+
+export const CommentsResponseSchema = Schema.Struct({
+  results: Schema.Array(CommentSchema),
+  _links: Schema.optional(
+    Schema.Struct({
+      next: Schema.optional(Schema.String),
+    }),
+  ),
+});
+export type CommentsResponse = Schema.Schema.Type<typeof CommentsResponseSchema>;
+
+/**
+ * Attachment information from Confluence API v2
+ */
+export const AttachmentSchema = Schema.Struct({
+  id: Schema.String,
+  title: Schema.String,
+  status: Schema.optional(Schema.String),
+  mediaType: Schema.optional(Schema.String),
+  fileSize: Schema.optional(Schema.Number),
+  webuiLink: Schema.optional(Schema.String),
+  downloadLink: Schema.optional(Schema.String),
+  version: Schema.optional(VersionSchema),
+});
+export type Attachment = Schema.Schema.Type<typeof AttachmentSchema>;
+
+export const AttachmentsResponseSchema = Schema.Struct({
+  results: Schema.Array(AttachmentSchema),
+  _links: Schema.optional(
+    Schema.Struct({
+      next: Schema.optional(Schema.String),
+    }),
+  ),
+});
+export type AttachmentsResponse = Schema.Schema.Type<typeof AttachmentsResponseSchema>;
+
+/**
+ * Search result item from CQL search
+ */
+export const SearchResultItemSchema = Schema.Struct({
+  id: Schema.optional(Schema.String),
+  title: Schema.optional(Schema.String),
+  type: Schema.optional(Schema.String),
+  status: Schema.optional(Schema.String),
+  space: Schema.optional(
+    Schema.Struct({
+      id: Schema.optional(Schema.String),
+      key: Schema.optional(Schema.String),
+      name: Schema.optional(Schema.String),
+    }),
+  ),
+  url: Schema.optional(Schema.String),
+  excerpt: Schema.optional(Schema.String),
+  lastModified: Schema.optional(Schema.String),
+  content: Schema.optional(
+    Schema.Struct({
+      id: Schema.optional(Schema.String),
+      type: Schema.optional(Schema.String),
+      title: Schema.optional(Schema.String),
+      _links: Schema.optional(
+        Schema.Struct({
+          webui: Schema.optional(Schema.String),
+        }),
+      ),
+    }),
+  ),
+});
+export type SearchResultItem = Schema.Schema.Type<typeof SearchResultItemSchema>;
+
+export const SearchResponseSchema = Schema.Struct({
+  results: Schema.Array(SearchResultItemSchema),
+  totalSize: Schema.optional(Schema.Number),
+  start: Schema.optional(Schema.Number),
+  limit: Schema.optional(Schema.Number),
+});
+export type SearchResponse = Schema.Schema.Type<typeof SearchResponseSchema>;
+
+/**
  * Page with children tree structure (for building hierarchy)
  */
 export interface PageTreeNode {

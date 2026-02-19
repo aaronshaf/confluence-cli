@@ -46,6 +46,16 @@
 | `cn status` | Check connection and sync status |
 | `cn tree` | Display space hierarchy as tree |
 | `cn open [page]` | Open page in browser |
+| `cn doctor` | Health check for sync issues |
+| `cn search <query>` | Search pages using Confluence CQL |
+| `cn spaces` | List available spaces |
+| `cn info <id\|file>` | Show page info and labels |
+| `cn create <title>` | Create a new page |
+| `cn delete <id>` | Delete a page |
+| `cn comments <id\|file>` | Show page comments |
+| `cn labels <id\|file>` | Manage page labels |
+| `cn move <id\|file> <parentId>` | Move a page to a new parent |
+| `cn attachments <id\|file>` | Manage page attachments |
 
 ## User Flows
 

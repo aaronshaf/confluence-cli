@@ -167,3 +167,37 @@ export function movePageEffect(
 
   return pipe(makeRequest, Effect.retry(rateLimitRetrySchedule));
 }
+
+/**
+ * Find a folder by title in a space using CQL search
+ */
+export async function findFolderByTitle(
+  baseUrl: string,
+  authHeader: string,
+  spaceKey: string,
+  title: string,
+  parentId?: string,
+): Promise<Folder | null> {
+  const escapedTitle = title.replace(/"/g, '\\"');
+  let cql = `type=folder AND space="${spaceKey}" AND title="${escapedTitle}"`;
+  if (parentId) cql += ` AND parent=${parentId}`;
+
+  const url = `${baseUrl}/wiki/rest/api/search?cql=${encodeURIComponent(cql)}&limit=10`;
+  const response = await fetch(url, { headers: { Authorization: authHeader, Accept: 'application/json' } });
+
+  if (!response.ok) return null;
+
+  const data = await response.json();
+  for (const result of data?.results || []) {
+    if (result.content?.type === 'folder' && result.content?.title === title) {
+      const content = result.content;
+      return {
+        id: content.id,
+        type: 'folder' as const,
+        title: content.title,
+        parentId: content.ancestors?.length > 0 ? content.ancestors[content.ancestors.length - 1]?.id : undefined,
+      };
+    }
+  }
+  return null;
+}

@@ -80,6 +80,32 @@ export function createValidFolder(
 }
 
 /**
+ * Create a valid attachment object for mocking
+ */
+export function createValidAttachment(
+  overrides: Partial<{
+    id: string;
+    title: string;
+    mediaType: string;
+    fileSize: number;
+  }> = {},
+): {
+  id: string;
+  title: string;
+  status?: string;
+  mediaType?: string;
+  fileSize?: number;
+} {
+  return {
+    id: overrides.id || 'att-123',
+    title: overrides.title || 'test-file.png',
+    status: 'current',
+    mediaType: overrides.mediaType || 'image/png',
+    fileSize: overrides.fileSize || 1024,
+  };
+}
+
+/**
  * Create a valid page object for mocking
  */
 export function createValidPage(

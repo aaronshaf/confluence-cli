@@ -219,3 +219,52 @@ export function setContentPropertyEffect(
 
   return pipe(makeRequest, Effect.retry(rateLimitRetrySchedule));
 }
+
+/**
+ * Delete a page (Effect version)
+ * Uses DELETE /wiki/api/v2/pages/{id} endpoint
+ */
+export function deletePageEffect(
+  baseUrl: string,
+  authHeader: string,
+  pageId: string,
+): Effect.Effect<void, ApiError | AuthError | NetworkError | RateLimitError | PageNotFoundError> {
+  const url = `${baseUrl}/wiki/api/v2/pages/${pageId}`;
+
+  const makeRequest = Effect.tryPromise({
+    try: async () => {
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          Authorization: authHeader,
+          Accept: 'application/json',
+        },
+      });
+
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After');
+        throw new RateLimitError('Rate limited', retryAfter ? Number.parseInt(retryAfter, 10) : undefined);
+      }
+
+      if (response.status === 401) throw new AuthError('Authentication failed', 401);
+      if (response.status === 403) throw new AuthError('Permission denied', 403);
+      if (response.status === 404) throw new PageNotFoundError(pageId);
+      if (response.status !== 204 && !response.ok) {
+        throw new ApiError(`Failed to delete page: ${await response.text()}`, response.status);
+      }
+    },
+    catch: (error) => {
+      if (
+        error instanceof RateLimitError ||
+        error instanceof AuthError ||
+        error instanceof ApiError ||
+        error instanceof PageNotFoundError
+      ) {
+        return error;
+      }
+      return new NetworkError(`Network error: ${error}`);
+    },
+  });
+
+  return pipe(makeRequest, Effect.retry(rateLimitRetrySchedule));
+}

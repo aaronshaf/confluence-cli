@@ -1,13 +1,22 @@
 import { HttpResponse, http } from 'msw';
 import {
+  AttachmentsResponseSchema,
+  CommentsResponseSchema,
   FolderSchema,
+  SearchResponseSchema,
   SpaceSchema,
   SpacesResponseSchema,
   PagesResponseSchema,
   PageSchema,
   UserSchema,
 } from '../../lib/confluence-client/types.js';
-import { createValidFolder, createValidPage, createValidSpace, validateAndReturn } from '../msw-schema-validation.js';
+import {
+  createValidAttachment,
+  createValidFolder,
+  createValidPage,
+  createValidSpace,
+  validateAndReturn,
+} from '../msw-schema-validation.js';
 
 /**
  * Shared MSW handlers with schema validation
@@ -106,6 +115,76 @@ export const handlers = [
   // Response body varies and is not validated by the client
   http.put('*/wiki/rest/api/content/:pageId/move/:position/:targetId', () => {
     return HttpResponse.json({});
+  }),
+
+  // Confluence footer comments mock
+  http.get('*/wiki/api/v2/pages/:pageId/footer-comments', () => {
+    return HttpResponse.json(validateAndReturn(CommentsResponseSchema, { results: [] }, 'Footer Comments'));
+  }),
+
+  // Confluence attachments mock
+  http.get('*/wiki/api/v2/pages/:pageId/attachments', () => {
+    return HttpResponse.json(validateAndReturn(AttachmentsResponseSchema, { results: [] }, 'Attachments'));
+  }),
+
+  // Upload attachment mock (v1 API)
+  http.post('*/wiki/rest/api/content/:pageId/child/attachment', () => {
+    const attachment = createValidAttachment({ id: `att-${Date.now()}`, title: 'uploaded-file.png' });
+    return HttpResponse.json({ results: [attachment] });
+  }),
+
+  // Delete attachment mock
+  http.delete('*/wiki/api/v2/attachments/:attachmentId', () => {
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  // Delete page mock
+  http.delete('*/wiki/api/v2/pages/:pageId', () => {
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  // Add label mock (v1 API)
+  http.post('*/wiki/rest/api/content/:pageId/label', () => {
+    return HttpResponse.json([]);
+  }),
+
+  // Remove label mock (v1 API)
+  http.delete('*/wiki/rest/api/content/:pageId/label/:labelName', () => {
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  // Search mock (v1 API)
+  http.get('*/wiki/rest/api/search', ({ request }) => {
+    const url = new URL(request.url);
+    const cql = url.searchParams.get('cql') || '';
+    if (cql.includes('type=folder')) {
+      return HttpResponse.json(validateAndReturn(SearchResponseSchema, { results: [] }, 'Search (folder)'));
+    }
+    return HttpResponse.json(
+      validateAndReturn(
+        SearchResponseSchema,
+        {
+          results: [
+            {
+              id: 'page-123',
+              title: 'Test Page',
+              type: 'page',
+              content: {
+                id: 'page-123',
+                type: 'page',
+                title: 'Test Page',
+                _links: { webui: '/wiki/spaces/TEST/pages/page-123' },
+              },
+              excerpt: 'Test content excerpt',
+            },
+          ],
+          totalSize: 1,
+          start: 0,
+          limit: 10,
+        },
+        'Search',
+      ),
+    );
   }),
 
   // Confluence user mock (v1 API - v2 doesn't have user endpoint)
