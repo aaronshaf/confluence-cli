@@ -34,8 +34,6 @@ cn spaces
 | Command | Description |
 |---------|-------------|
 | `cn setup` | Configure Confluence credentials |
-| `cn clone <SPACE_KEY>` | Clone a space to a new folder |
-| `cn pull` | Pull changes from Confluence as markdown |
 | `cn status` | Check connection and sync status |
 | `cn tree` | Display page hierarchy |
 | `cn open [page]` | Open page in browser |
@@ -43,13 +41,16 @@ cn spaces
 | `cn search <query>` | Search pages using CQL |
 | `cn spaces` | List available spaces |
 | `cn info <id\|file>` | Show page info and labels |
-| `cn create <title>` | Create a new page |
+| `cn create <title>` | Create a new page (pipe content via stdin) |
+| `cn update <id>` | Update an existing page (pipe content via stdin) |
 | `cn delete <id>` | Delete a page |
 | `cn comments <id\|file>` | Show page comments |
 | `cn labels <id\|file>` | Manage page labels |
 | `cn move <id\|file> <parentId>` | Move a page to a new parent |
 | `cn attachments <id\|file>` | Manage page attachments |
 | `cn folder <subcommand>` | Manage folders (create, list, delete, move) |
+| `cn clone <SPACE_KEY>` | Clone a space to a new folder |
+| `cn pull` | Pull changes from Confluence as markdown |
 
 Run `cn <command> --help` for details on each command.
 

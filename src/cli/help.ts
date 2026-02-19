@@ -219,6 +219,7 @@ ${chalk.bold('cn create - Create a new Confluence page')}
 
 ${chalk.yellow('Usage:')}
   cn create <title> [options]
+  echo "<p>Content</p>" | cn create <title> [options]
 
 ${chalk.yellow('Arguments:')}
   title                     Page title (required)
@@ -226,8 +227,37 @@ ${chalk.yellow('Arguments:')}
 ${chalk.yellow('Options:')}
   --space <key>             Space key (required if not in cloned dir)
   --parent <id>             Parent page ID
+  --format <format>         Body format: storage (default), wiki, atlas_doc_format
   --open                    Open page in browser after creation
   --help                    Show this help message
+
+${chalk.yellow('Examples:')}
+  cn create "My Page" --space ENG
+  echo "<p>Hello</p>" | cn create "My Page" --space ENG
+  echo "h1. Hello" | cn create "Wiki Page" --space ENG --format wiki
+`);
+}
+
+export function showUpdateHelp(): void {
+  console.log(`
+${chalk.bold('cn update - Update an existing Confluence page')}
+
+${chalk.yellow('Usage:')}
+  echo "<p>Content</p>" | cn update <id> [options]
+
+${chalk.yellow('Arguments:')}
+  id                        Page ID (required)
+
+${chalk.yellow('Options:')}
+  --format <format>         Body format: storage (default), wiki, atlas_doc_format
+  --title <title>           New page title (default: keep existing title)
+  --message <msg>           Version message
+  --help                    Show this help message
+
+${chalk.yellow('Examples:')}
+  echo "<p>Updated content</p>" | cn update 123456
+  echo "<p>New content</p>" | cn update 123456 --title "New Title"
+  echo "h1. Hello" | cn update 123456 --format wiki --message "Updated via automation"
 `);
 }
 
@@ -389,6 +419,7 @@ ${chalk.yellow('Commands:')}
   cn spaces                 List available spaces
   cn info                   Show page info and labels
   cn create                 Create a new page
+  cn update                 Update an existing page
   cn delete                 Delete a page
   cn comments               Show page comments
   cn labels                 Manage page labels

@@ -23,6 +23,7 @@ import {
   showSpacesHelp,
   showStatusHelp,
   showTreeHelp,
+  showUpdateHelp,
 } from './help.js';
 import { attachmentsCommand } from './commands/attachments.js';
 import { cloneCommand } from './commands/clone.js';
@@ -41,6 +42,9 @@ import { setup } from './commands/setup.js';
 import { spacesCommand } from './commands/spaces.js';
 import { statusCommand } from './commands/status.js';
 import { treeCommand } from './commands/tree.js';
+import { updateCommand } from './commands/update.js';
+
+import { findPositional } from './utils/args.js';
 
 // Get version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -271,8 +275,12 @@ async function main(): Promise<void> {
         if (parentIdx !== -1 && parentIdx + 1 < args.length) {
           parentId = args[parentIdx + 1];
         }
-        const createFlagValues = new Set([spaceKey, parentId].filter(Boolean));
-        const title = subArgs.find((arg) => !arg.startsWith('--') && !createFlagValues.has(arg));
+        let createFormat: string | undefined;
+        const createFormatIdx = args.indexOf('--format');
+        if (createFormatIdx !== -1 && createFormatIdx + 1 < args.length) {
+          createFormat = args[createFormatIdx + 1];
+        }
+        const title = findPositional(subArgs, ['--space', '--parent', '--format']);
         if (!title) {
           console.error(chalk.red('Page title is required.'));
           console.log(chalk.gray('Usage: cn create <title>'));
@@ -282,6 +290,7 @@ async function main(): Promise<void> {
           space: spaceKey,
           parent: parentId,
           open: args.includes('--open'),
+          format: createFormat,
         });
         break;
       }
@@ -389,6 +398,40 @@ async function main(): Promise<void> {
           download: downloadId,
           delete: deleteId,
           xml: args.includes('--xml'),
+        });
+        break;
+      }
+
+      case 'update': {
+        if (args.includes('--help')) {
+          showUpdateHelp();
+          process.exit(EXIT_CODES.SUCCESS);
+        }
+        let updateFormat: string | undefined;
+        const updateFormatIdx = args.indexOf('--format');
+        if (updateFormatIdx !== -1 && updateFormatIdx + 1 < args.length) {
+          updateFormat = args[updateFormatIdx + 1];
+        }
+        let updateTitle: string | undefined;
+        const updateTitleIdx = args.indexOf('--title');
+        if (updateTitleIdx !== -1 && updateTitleIdx + 1 < args.length) {
+          updateTitle = args[updateTitleIdx + 1];
+        }
+        let updateMessage: string | undefined;
+        const updateMessageIdx = args.indexOf('--message');
+        if (updateMessageIdx !== -1 && updateMessageIdx + 1 < args.length) {
+          updateMessage = args[updateMessageIdx + 1];
+        }
+        const updateId = findPositional(subArgs, ['--format', '--title', '--message']);
+        if (!updateId) {
+          console.error(chalk.red('Page ID is required.'));
+          console.log(chalk.gray('Usage: cn update <id>'));
+          process.exit(EXIT_CODES.INVALID_ARGUMENTS);
+        }
+        await updateCommand(updateId, {
+          format: updateFormat,
+          title: updateTitle,
+          message: updateMessage,
         });
         break;
       }

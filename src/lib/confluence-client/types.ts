@@ -182,12 +182,19 @@ export interface VersionConflictResponse {
 /**
  * Request body for updating a page
  */
+export const RepresentationSchema = Schema.Union(
+  Schema.Literal('storage'),
+  Schema.Literal('wiki'),
+  Schema.Literal('atlas_doc_format'),
+);
+export type Representation = Schema.Schema.Type<typeof RepresentationSchema>;
+
 export const UpdatePageRequestSchema = Schema.Struct({
   id: Schema.String,
   status: Schema.String,
   title: Schema.String,
   body: Schema.Struct({
-    representation: Schema.Literal('storage'),
+    representation: RepresentationSchema,
     value: Schema.String,
   }),
   version: Schema.Struct({
@@ -206,7 +213,7 @@ export const CreatePageRequestSchema = Schema.Struct({
   title: Schema.String,
   parentId: Schema.optional(Schema.String),
   body: Schema.Struct({
-    representation: Schema.Literal('storage'),
+    representation: RepresentationSchema,
     value: Schema.String,
   }),
 });

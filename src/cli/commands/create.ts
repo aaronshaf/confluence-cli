@@ -4,11 +4,13 @@ import { ConfigManager } from '../../lib/config.js';
 import { EXIT_CODES } from '../../lib/errors.js';
 import { readSpaceConfig } from '../../lib/space-config.js';
 import { openUrl } from '../utils/browser.js';
+import { VALID_FORMATS, isValidFormat, readStdin } from '../utils/stdin.js';
 
 export interface CreateCommandOptions {
   space?: string;
   parent?: string;
   open?: boolean;
+  format?: string;
 }
 
 export async function createCommand(title: string, options: CreateCommandOptions = {}): Promise<void> {
@@ -18,6 +20,23 @@ export async function createCommand(title: string, options: CreateCommandOptions
   if (!config) {
     console.error(chalk.red('Not configured. Run: cn setup'));
     process.exit(EXIT_CODES.CONFIG_ERROR);
+  }
+
+  const rawFormat = options.format ?? 'storage';
+  if (!isValidFormat(rawFormat)) {
+    console.error(chalk.red(`Invalid format: ${rawFormat}`));
+    console.log(chalk.gray(`Valid formats: ${VALID_FORMATS.join(', ')}`));
+    process.exit(EXIT_CODES.INVALID_ARGUMENTS);
+  }
+  const representation = rawFormat;
+
+  let bodyValue = '';
+  if (!process.stdin.isTTY) {
+    bodyValue = await readStdin();
+    if (bodyValue.trim().length === 0) {
+      console.error(chalk.red('Stdin is empty. Provide content to create a page with body.'));
+      process.exit(EXIT_CODES.INVALID_ARGUMENTS);
+    }
   }
 
   const client = new ConfluenceClient(config);
@@ -41,8 +60,8 @@ export async function createCommand(title: string, options: CreateCommandOptions
     title,
     parentId: options.parent,
     body: {
-      representation: 'storage',
-      value: '',
+      representation,
+      value: bodyValue,
     },
   });
 
