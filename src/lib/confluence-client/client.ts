@@ -7,7 +7,7 @@ import {
   NetworkError,
   type PageNotFoundError,
   RateLimitError,
-  SpaceNotFoundError,
+  type SpaceNotFoundError,
   type VersionConflictError,
 } from '../errors.js';
 import {
@@ -35,12 +35,19 @@ import { searchEffect as searchEffectFn } from './search-operations.js';
 import { getAllFooterComments as getAllFooterCommentsFn } from './comment-operations.js';
 import { getUserEffect as getUserEffectFn } from './user-operations.js';
 import {
+  getAllSpaces as getAllSpacesFn,
+  getSpaces as getSpacesFn,
+  getSpacesEffect as getSpacesEffectFn,
+  getSpaceByKey as getSpaceByKeyFn,
+  getSpaceByKeyEffect as getSpaceByKeyEffectFn,
+  getSpaceByIdEffect as getSpaceByIdEffectFn,
+} from './space-operations.js';
+import {
   CommentsResponseSchema,
   FolderSchema,
   LabelsResponseSchema,
   PageSchema,
   PagesResponseSchema,
-  SpaceSchema,
   SpacesResponseSchema,
   type Attachment,
   type AttachmentsResponse,
@@ -109,8 +116,10 @@ export class ConfluenceClient {
   ): Effect.Effect<T, ApiError | AuthError | NetworkError | RateLimitError> {
     const url = `${this.baseUrl}/wiki/api/v2${path}`;
 
+    const verbose = process.env.CN_DEBUG === '1';
     const makeRequest = Effect.tryPromise({
       try: async () => {
+        if (verbose) process.stderr.write(`[debug] fetch: ${url}\n`);
         const response = await fetch(url, {
           ...options,
           headers: {
@@ -170,74 +179,36 @@ export class ConfluenceClient {
 
   /** Get all spaces (Effect version) */
   getSpacesEffect(limit = 25): Effect.Effect<SpacesResponse, ApiError | AuthError | NetworkError | RateLimitError> {
-    return this.fetchWithRetryEffect(`/spaces?limit=${limit}`, SpacesResponseSchema);
+    return getSpacesEffectFn(this.baseUrl, this.authHeader, limit, (path, schema) =>
+      this.fetchWithRetryEffect(path, schema),
+    );
   }
 
-  /** Get all spaces (async version) */
-  async getSpaces(limit = 25): Promise<SpacesResponse> {
-    return this.fetchWithRetry(`/spaces?limit=${limit}`, SpacesResponseSchema);
+  /** Get spaces with offset-based pagination via v1 API */
+  async getSpaces(limit = 25, page = 1): Promise<{ results: Space[]; start: number; limit: number; size: number }> {
+    return getSpacesFn(this.baseUrl, this.authHeader, limit, page);
   }
 
-  /** Get all spaces with pagination (async version) */
+  /** Get all spaces with full cursor pagination */
   async getAllSpaces(): Promise<Space[]> {
-    const allSpaces: Space[] = [];
-    let cursor: string | undefined;
-    do {
-      let path = '/spaces?limit=100';
-      if (cursor) path += `&cursor=${encodeURIComponent(cursor)}`;
-      const response = await this.fetchWithRetry(path, SpacesResponseSchema);
-      allSpaces.push(...response.results);
-      cursor = extractCursor(response._links?.next);
-    } while (cursor);
-    return allSpaces;
+    return getAllSpacesFn(this.baseUrl, this.authHeader, (path, schema) => this.fetchWithRetry(path, schema));
   }
 
   /** Get a space by key (Effect version) */
   getSpaceByKeyEffect(
     key: string,
   ): Effect.Effect<Space, ApiError | AuthError | NetworkError | RateLimitError | SpaceNotFoundError> {
-    return pipe(
-      this.fetchWithRetryEffect(`/spaces?keys=${key}&limit=1`, SpacesResponseSchema),
-      Effect.flatMap((response) => {
-        if (response.results.length === 0) {
-          return Effect.fail(new SpaceNotFoundError(key));
-        }
-        return Effect.succeed(response.results[0]);
-      }),
-    );
+    return getSpaceByKeyEffectFn(key, (path, schema) => this.fetchWithRetryEffect(path, schema));
   }
 
   /** Get a space by key (async version) */
   async getSpaceByKey(key: string): Promise<Space> {
-    const response = await this.fetchWithRetry(`/spaces?keys=${key}&limit=1`, SpacesResponseSchema);
-    if (response.results.length === 0) {
-      throw new SpaceNotFoundError(key);
-    }
-    return response.results[0];
+    return getSpaceByKeyFn(key, (path, schema) => this.fetchWithRetry(path, schema));
   }
 
   /** Get a space by ID (Effect version) */
-  getSpaceByIdEffect(
-    id: string,
-  ): Effect.Effect<Space, ApiError | AuthError | NetworkError | RateLimitError | SpaceNotFoundError> {
-    const baseUrl = this.baseUrl;
-    const authHeader = this.authHeader;
-    return Effect.tryPromise({
-      try: async () => {
-        const url = `${baseUrl}/wiki/api/v2/spaces/${id}`;
-        const response = await fetch(url, { headers: { Authorization: authHeader, Accept: 'application/json' } });
-        if (response.status === 404) throw new SpaceNotFoundError(id);
-        if (response.status === 401) throw new AuthError('Invalid credentials', 401);
-        if (response.status === 403) throw new AuthError('Access denied', 403);
-        if (!response.ok) throw new ApiError(`API error: ${response.status}`, response.status);
-        return Schema.decodeUnknownSync(SpaceSchema)(await response.json());
-      },
-      catch: (error) => {
-        if (error instanceof SpaceNotFoundError || error instanceof AuthError || error instanceof ApiError)
-          return error;
-        return new NetworkError(`Network error: ${error}`);
-      },
-    });
+  getSpaceByIdEffect(id: string): Effect.Effect<Space, ApiError | AuthError | NetworkError | SpaceNotFoundError> {
+    return getSpaceByIdEffectFn(id, this.baseUrl, this.authHeader);
   }
 
   /** Get a space by ID (async version) */

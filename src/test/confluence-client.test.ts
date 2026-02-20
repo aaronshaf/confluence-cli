@@ -23,7 +23,7 @@ describe('ConfluenceClient', () => {
 
     test('throws AuthError on 401', async () => {
       server.use(
-        http.get('*/wiki/api/v2/spaces', () => {
+        http.get('*/wiki/rest/api/space', () => {
           return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }),
       );
@@ -37,7 +37,7 @@ describe('ConfluenceClient', () => {
 
     test('throws AuthError on 403', async () => {
       server.use(
-        http.get('*/wiki/api/v2/spaces', () => {
+        http.get('*/wiki/rest/api/space', () => {
           return HttpResponse.json({ error: 'Forbidden' }, { status: 403 });
         }),
       );
@@ -63,16 +63,18 @@ describe('ConfluenceClient', () => {
 
     test('handles spaces with null description', async () => {
       server.use(
-        http.get('*/wiki/api/v2/spaces', () => {
+        http.get('*/wiki/rest/api/space', () => {
           return HttpResponse.json({
             results: [
               {
-                id: 'space-null-desc',
+                id: 99,
                 key: 'NULL',
                 name: 'Space with null description',
-                description: null,
               },
             ],
+            start: 0,
+            limit: 25,
+            size: 1,
           });
         }),
       );
@@ -82,7 +84,6 @@ describe('ConfluenceClient', () => {
 
       expect(response.results).toBeArray();
       expect(response.results[0].key).toBe('NULL');
-      expect(response.results[0].description).toBeNull();
     });
   });
 
@@ -425,7 +426,8 @@ describe('ConfluenceClient', () => {
       );
 
       const client = new ConfluenceClient(testConfig);
-      const response = await client.getSpaces();
+      const { Effect } = await import('effect');
+      const response = await Effect.runPromise(client.getSpacesEffect(1));
 
       expect(response.results).toBeArray();
       expect(requestCount).toBe(2);

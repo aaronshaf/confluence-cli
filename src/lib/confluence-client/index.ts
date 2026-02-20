@@ -19,6 +19,7 @@ export type {
   SearchResultItem,
   Space,
   SpacesResponse,
+  SpacesV1Response,
   UpdatePageRequest,
   User,
   Version,

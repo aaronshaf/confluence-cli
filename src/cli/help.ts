@@ -144,7 +144,8 @@ ${chalk.yellow('Usage:')}
   cn open [options]
 
 ${chalk.yellow('Description:')}
-  Opens a Confluence page in your default browser.
+  Opens a Confluence page in your default web browser (launches a browser window).
+  Not suitable for non-interactive environments (CI, bots, scripts).
   Without arguments, opens the space home page.
 
 ${chalk.yellow('Arguments:')}
@@ -439,10 +440,14 @@ ${chalk.yellow('Environment Variables:')}
 
 ${chalk.yellow('Examples:')}
   cn setup                  Configure credentials
-  cn clone DOCS             Clone DOCS space to ./DOCS
-  cn pull                   Pull changes
-  cn tree                   Show page hierarchy
+  cn spaces                 List available spaces
+  cn search "my topic"      Search across all spaces
+  cn search "api" --space ENG  Search within a space
+  cn info 123456            Show page info
   cn open "My Page"         Open page in browser
+  cn create "New Page" --space ENG  Create a page
+  cn clone DOCS             Clone DOCS space locally
+  cn pull                   Pull changes
 
 ${chalk.gray('For more information on a command, run: cn <command> --help')}
 ${chalk.gray('Confluence REST API reference: https://docs.atlassian.com/atlassian-confluence/REST/6.6.0/')}

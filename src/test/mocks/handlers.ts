@@ -26,6 +26,18 @@ import {
  * Individual tests should override these with server.use() for specific test scenarios.
  */
 export const handlers = [
+  // Confluence v1 spaces mock (offset-based pagination)
+  http.get('*/wiki/rest/api/space', ({ request }) => {
+    const url = new URL(request.url);
+    const limit = Number(url.searchParams.get('limit') ?? 25);
+    const start = Number(url.searchParams.get('start') ?? 0);
+    const spaces = [
+      { id: 1, key: 'TEST', name: 'Test Space', type: 'global' },
+      { id: 2, key: 'DOCS', name: 'Documentation', type: 'global' },
+    ].slice(start, start + limit);
+    return HttpResponse.json({ results: spaces, start, limit, size: spaces.length });
+  }),
+
   // Confluence spaces mock
   http.get('*/wiki/api/v2/spaces', ({ request }) => {
     const url = new URL(request.url);

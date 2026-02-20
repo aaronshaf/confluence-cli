@@ -24,7 +24,7 @@ export const SpaceSchema = Schema.Struct({
   name: Schema.String,
   type: Schema.optional(Schema.String),
   status: Schema.optional(Schema.String),
-  homepageId: Schema.optional(Schema.String),
+  homepageId: Schema.optional(Schema.NullOr(Schema.String)),
   description: Schema.optional(
     Schema.NullOr(
       Schema.Struct({
@@ -56,6 +56,23 @@ export const SpacesResponseSchema = Schema.Struct({
   ),
 });
 export type SpacesResponse = Schema.Schema.Type<typeof SpacesResponseSchema>;
+
+const SpaceV1Schema = Schema.Struct({
+  id: Schema.Number,
+  key: Schema.String,
+  name: Schema.String,
+  type: Schema.optional(Schema.String),
+  status: Schema.optional(Schema.String),
+  _links: Schema.optional(Schema.Struct({ webui: Schema.optional(Schema.String) })),
+});
+
+export const SpacesV1ResponseSchema = Schema.Struct({
+  results: Schema.Array(SpaceV1Schema),
+  start: Schema.Number,
+  limit: Schema.Number,
+  size: Schema.Number,
+});
+export type SpacesV1Response = Schema.Schema.Type<typeof SpacesV1ResponseSchema>;
 
 /**
  * Page version information

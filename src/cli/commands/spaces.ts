@@ -6,6 +6,8 @@ import { escapeXml } from '../../lib/formatters.js';
 
 export interface SpacesCommandOptions {
   xml?: boolean;
+  limit?: number;
+  page?: number;
 }
 
 export async function spacesCommand(options: SpacesCommandOptions = {}): Promise<void> {
@@ -17,8 +19,11 @@ export async function spacesCommand(options: SpacesCommandOptions = {}): Promise
     process.exit(EXIT_CODES.CONFIG_ERROR);
   }
 
+  const limit = options.limit ?? 25;
+  const page = options.page ?? 1;
   const client = new ConfluenceClient(config);
-  const spaces = await client.getAllSpaces();
+  const response = await client.getSpaces(limit, page);
+  const spaces = response.results;
 
   if (options.xml) {
     console.log('<spaces>');
@@ -38,5 +43,9 @@ export async function spacesCommand(options: SpacesCommandOptions = {}): Promise
 
   for (const space of spaces) {
     console.log(`${chalk.bold(space.key)}  ${space.name}  ${chalk.gray(space.id)}`);
+  }
+
+  if (response.size === limit) {
+    console.log(chalk.gray(`\nPage ${page}. Use --page ${page + 1} for next page, --limit to change page size.`));
   }
 }

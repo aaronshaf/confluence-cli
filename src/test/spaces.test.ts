@@ -42,7 +42,7 @@ describe('ConfluenceClient - spaces', () => {
 
   test('throws on 401', async () => {
     server.use(
-      http.get('*/wiki/api/v2/spaces', () => {
+      http.get('*/wiki/rest/api/space', () => {
         return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
       }),
     );

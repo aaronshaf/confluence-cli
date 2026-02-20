@@ -214,7 +214,23 @@ async function main(): Promise<void> {
           showSpacesHelp();
           process.exit(EXIT_CODES.SUCCESS);
         }
-        await spacesCommand({ xml: args.includes('--xml') });
+        {
+          let limit: number | undefined;
+          const limitArg = args.find((a) => a.startsWith('--limit=') || a === '--limit');
+          if (limitArg) {
+            limit = limitArg.includes('=')
+              ? Number.parseInt(limitArg.split('=')[1], 10)
+              : Number.parseInt(args[args.indexOf('--limit') + 1], 10);
+          }
+          let page: number | undefined;
+          const pageArg = args.find((a) => a.startsWith('--page=') || a === '--page');
+          if (pageArg) {
+            page = pageArg.includes('=')
+              ? Number.parseInt(pageArg.split('=')[1], 10)
+              : Number.parseInt(args[args.indexOf('--page') + 1], 10);
+          }
+          await spacesCommand({ xml: args.includes('--xml'), limit, page });
+        }
         break;
 
       case 'search': {
