@@ -171,8 +171,16 @@ ${chalk.yellow('Usage:')}
   cn spaces [options]
 
 ${chalk.yellow('Options:')}
+  --limit <n>               Number of spaces per page (default: 25)
+  --page <n>                Page number for pagination
   --xml                     Output in XML format
   --help                    Show this help message
+
+${chalk.yellow('Examples:')}
+  cn spaces                 List first 25 spaces
+  cn spaces --limit 50      List 50 spaces
+  cn spaces --page 2        Show second page of results
+  cn spaces --page 2 --limit 10  Custom page size
 `);
 }
 

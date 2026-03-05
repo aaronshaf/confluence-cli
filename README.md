@@ -47,6 +47,7 @@ cn spaces
 | `cn comments <id\|file>` | Show page comments |
 | `cn labels <id\|file>` | Manage page labels |
 | `cn move <id\|file> <parentId>` | Move a page to a new parent |
+| `cn read <id\|file>` | Read and display page content |
 | `cn attachments <id\|file>` | Manage page attachments |
 | `cn folder <subcommand>` | Manage folders (create, list, delete, move) |
 | `cn clone <SPACE_KEY>` | Clone a space to a new folder |

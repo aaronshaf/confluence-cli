@@ -72,14 +72,25 @@ Records of significant architectural decisions with context and rationale:
 ## Commands
 
 ```bash
-cn setup     # Configure Confluence credentials
-cn clone     # Clone a space to a new folder
-cn pull      # Pull changes from Confluence
-cn push      # Push local file to Confluence
-cn read      # Read and display page content
-cn status    # Check connection and sync status
-cn tree      # Display page hierarchy
-cn open      # Open page in browser
+cn setup                  # Configure Confluence credentials
+cn clone                  # Clone a space to a new folder
+cn pull                   # Pull changes from Confluence
+cn status                 # Check connection and sync status
+cn tree                   # Display page hierarchy
+cn open                   # Open page in browser
+cn doctor                 # Health check for sync issues
+cn search                 # Search pages using CQL
+cn spaces                 # List available spaces
+cn info                   # Show page info and labels
+cn read                   # Read and display page content
+cn create                 # Create a new page
+cn update                 # Update an existing page
+cn delete                 # Delete a page
+cn comments               # Show page comments
+cn labels                 # Manage page labels
+cn move                   # Move a page to a new parent
+cn attachments            # Manage page attachments
+cn folder                 # Manage Confluence folders
 ```
 
 ## Key Files

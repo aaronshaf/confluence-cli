@@ -190,216 +190,6 @@ Pulling space: Engineering (ENG)
 
 ---
 
-## cn push
-
-Push local markdown files to Confluence. Creates new pages if `page_id` is missing, updates existing pages otherwise.
-
-### Usage
-
-```
-cn push [file] [options]
-```
-
-### Options
-
-| Option | Description |
-|--------|-------------|
-| `--force` | Ignore version conflicts and overwrite remote changes |
-| `--dry-run` | Show what would be pushed without making changes |
-
-### Arguments
-
-- `file` - Path to the markdown file to push (optional)
-
-### Modes
-
-**Single File Mode** (`cn push <file>`):
-- Pushes the specified file to Confluence
-- Creates new page if no `page_id` in frontmatter
-- Updates existing page if `page_id` is present
-
-**Batch Mode** (`cn push`):
-- Scans all markdown files in directory tree
-- Detects changed files (file mtime > `synced_at`)
-- Detects new files (no `page_id` in frontmatter)
-- Prompts y/n for each file before pushing
-- Excludes: `node_modules/`, `.git/`, `dist/`, `build/`, etc.
-
-### Flow (Existing Page)
-
-1. Read and parse markdown file
-2. Fetch current remote page version
-3. Compare versions (unless `--force`)
-4. Convert markdown to Confluence Storage Format HTML
-5. Update page via API
-6. Update local frontmatter with new metadata
-7. Rename file if title changed
-8. Update `.confluence.json` sync state
-
-### Flow (New Page)
-
-1. Read and parse markdown file
-2. Detect missing `page_id` in frontmatter
-3. Convert markdown to Confluence Storage Format HTML
-4. Create page via API (uses `spaceId` from `.confluence.json`)
-5. Populate frontmatter with all metadata (`page_id`, `created_at`, `author_id`, `author_name`, `author_email`, etc.)
-6. Rename file to match title slug
-7. Update `.confluence.json` sync state
-
-### Requirements
-
-- Must be in a directory with `.confluence.json`
-- For new pages: optionally specify `parent_id` in frontmatter to set parent page
-- For new pages: title comes from frontmatter `title` field, first `# H1` heading, or filename (in that priority order)
-
-### Output (Update Existing)
-
-```
-$ cn push ./docs/getting-started.md
-Pushing: Getting Started
-  Checking remote version...
-  Converting markdown to HTML...
-  Pushing to Confluence (version 3 → 4)...
-
-✓ Pushed: Getting Started (version 3 → 4)
-  https://company.atlassian.net/wiki/spaces/ENG/pages/123456/Getting+Started
-```
-
-### Output (Create New)
-
-```
-$ cn push ./docs/new-feature.md
-Creating: New Feature
-  (New page - no page_id in frontmatter)
-  Converting markdown to HTML...
-  Creating page on Confluence...
-  Renamed: new-feature.md → new-feature.md
-
-✓ Created: New Feature (page_id: 789012)
-  https://company.atlassian.net/wiki/spaces/ENG/pages/789012/New+Feature
-```
-
-### Output (Batch Mode)
-
-```
-$ cn push
-Scanning for changes...
-
-Found 3 file(s) to push:
-  [N] new-feature.md
-  [M] getting-started.md
-  [M] api-reference/auth.md
-
-? Push new-feature.md? (create) yes
-Creating: new-feature
-  (New page - no page_id in frontmatter)
-  Converting markdown to HTML...
-  Creating page on Confluence...
-
-✓ Created: new-feature (page_id: 789012)
-
-? Push getting-started.md? (update) yes
-Pushing: Getting Started
-  Checking remote version...
-  Converting markdown to HTML...
-  Pushing to Confluence (version 3 → 4)...
-
-✓ Pushed: Getting Started (version 3 → 4)
-
-? Push api-reference/auth.md? (update) no
-
-Push complete:
-  2 pushed
-  1 skipped
-```
-
-### Output (Dry Run)
-
-```
-$ cn push --dry-run
-Scanning for changes...
-
-Found 3 file(s) to push:
-  [N] new-feature.md
-  [M] getting-started.md
-  [M] api-reference/auth.md
-
---- DRY RUN MODE ---
-Would push 1 new and 2 modified file(s)
-No changes were made (dry run mode)
-```
-
-### Version Conflict
-
-```
-$ cn push ./docs/getting-started.md
-Pushing: Getting Started
-  Checking remote version...
-
-Version conflict detected.
-  Local version:  3
-  Remote version: 5
-
-The page has been modified on Confluence since your last pull.
-Options:
-  - Run "cn pull --page ./docs/getting-started.md" to get the latest version
-  - Run "cn push ./docs/getting-started.md --force" to overwrite remote changes
-```
-
-### Conversion Warnings
-
-```
-$ cn push ./docs/getting-started.md
-Pushing: Getting Started
-  Checking remote version...
-  Converting markdown to HTML...
-
-Conversion warnings:
-  ! User mentions (@username) will render as plain text. Use Confluence UI to add mentions.
-  ! Local image "./screenshot.png" will not display in Confluence. Use absolute URLs.
-
-  Pushing to Confluence (version 3 → 4)...
-
-✓ Pushed: Getting Started (version 3 → 4)
-```
-
-### Supported Markdown
-
-| Element | Support |
-|---------|---------|
-| Headings | Full |
-| Paragraphs | Full |
-| Bold/Italic | Full |
-| Code blocks | Full (converts to Confluence code macro) |
-| Inline code | Full |
-| Lists (ordered/unordered) | Full |
-| Links | Full |
-| Tables | Full |
-| Horizontal rules | Full |
-| Blockquotes | Full (special panels for Info:/Note:/Warning:/Tip:) |
-
-### Unsupported Elements (Warnings)
-
-| Element | Behavior |
-|---------|----------|
-| User mentions (@username) | Rendered as plain text |
-| Local images | Warning, image won't display |
-| Task list checkboxes | Converted to regular list items |
-| Footnotes | Rendered as plain text |
-| Confluence macros | Not preserved from original |
-
-### Errors
-
-| Error | Exit Code | Description |
-|-------|-----------|-------------|
-| Page not found | 7 | Page deleted from Confluence |
-| Version conflict | 8 | Remote version differs (use --force) |
-| Authentication failed | 3 | Invalid credentials |
-| Network error | 4 | Connection failed |
-| No space configured | 2 | Missing `.confluence.json` file |
-
----
-
 ## cn status
 
 Check connection status and sync information.
@@ -648,8 +438,18 @@ cn spaces [options]
 ```
 
 **Options:**
+- `--limit <n>` - Number of spaces per page (default: 25)
+- `--page <n>` - Page number for pagination
 - `--xml` - Output in XML format
 - `--help` - Show help
+
+**Examples:**
+```bash
+cn spaces
+cn spaces --limit 50
+cn spaces --page 2
+cn spaces --page 2 --limit 10
+```
 
 ---
 
@@ -813,6 +613,83 @@ cn attachments 123456
 cn attachments 123456 --upload ./image.png
 cn attachments 123456 --download att-789
 cn attachments 123456 --delete att-789
+```
+
+---
+
+## cn update
+
+Update an existing Confluence page body via stdin.
+
+### Usage
+
+```
+echo "<p>Content</p>" | cn update <id> [options]
+```
+
+### Arguments
+
+- `id` - Page ID (required)
+
+### Options
+
+- `--format <format>` - Body format: `storage` (default), `wiki`, `atlas_doc_format`
+- `--title <title>` - New page title (default: keep existing title)
+- `--message <msg>` - Version message
+- `--help` - Show help
+
+### Behavior
+
+1. Read body content from stdin (required)
+2. Fetch current page to get version number and existing title
+3. Update page via API with incremented version
+4. Print confirmation with URL
+
+### Examples
+
+```bash
+echo "<p>Updated content</p>" | cn update 123456
+echo "<p>New content</p>" | cn update 123456 --title "New Title"
+echo "h1. Hello" | cn update 123456 --format wiki --message "Updated via automation"
+```
+
+---
+
+## cn folder
+
+Manage Confluence folders (a special content type for organizing pages).
+
+### Usage
+
+```
+cn folder <subcommand> [options]
+```
+
+### Subcommands
+
+- `create <title>` - Create a new folder
+- `list` - List folders in a space
+- `delete <id>` - Delete a folder
+- `move <id> <parentId>` - Move a folder to a new parent
+
+### Options
+
+- `--space <key>` - Space key (required for create/list if not in cloned dir)
+- `--parent <id>` - Parent folder ID (for create)
+- `--force` - Skip confirmation prompt (for delete)
+- `--xml` - Output in XML format (for list)
+- `--help` - Show help
+
+### Examples
+
+```bash
+cn folder create "My Folder" --space DOCS
+cn folder create "Nested" --space DOCS --parent 123456
+cn folder list --space DOCS
+cn folder list --space DOCS --xml
+cn folder delete 123456
+cn folder delete 123456 --force
+cn folder move 123456 789012
 ```
 
 ---
