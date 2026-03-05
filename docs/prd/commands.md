@@ -817,6 +817,82 @@ cn attachments 123456 --delete att-789
 
 ---
 
+## cn read
+
+Read a single page's body content and output it to stdout as markdown.
+
+### Motivation
+
+All other content-retrieval commands (`pull`, `clone`) require a cloned space directory and write to disk. `cn info` only returns metadata. `cn search` only returns excerpts. There is no way to quickly read a single page's full body content to stdout. This is a gap for:
+
+- **Agent/LLM workflows**: Agents need to read page content without setting up a local clone.
+- **Quick lookups**: Pipe page content to other tools without side effects on disk.
+- **Scripting**: Compose `cn search` then `cn read` pipelines.
+
+### Usage
+
+```
+cn read <id|file> [options]
+```
+
+### Arguments
+
+- `id|file` - Page ID or path to local markdown file (required)
+
+### Options
+
+```
+--xml       Output in XML format (body wrapped in <content> tags)
+--html      Output raw Confluence storage format HTML instead of markdown
+```
+
+### Behavior
+
+1. Resolve page target (ID or local file path)
+2. Fetch page with body content via API (`getPage(id, true)`)
+3. Convert HTML storage format to markdown (using Turndown)
+4. Print markdown to stdout
+
+### Output
+
+```
+$ cn read 123456
+# Getting Started
+
+Welcome to our documentation. This guide covers...
+```
+
+### XML Output
+
+```xml
+$ cn read 123456 --xml
+<page>
+  <id>123456</id>
+  <title>Getting Started</title>
+  <content>
+# Getting Started
+
+Welcome to our documentation. This guide covers...
+  </content>
+</page>
+```
+
+### HTML Output
+
+```
+$ cn read 123456 --html
+<h1>Getting Started</h1>
+<p>Welcome to our documentation. This guide covers...</p>
+```
+
+### Notes
+
+- Does not require a cloned space directory or `.confluence.json`
+- Only requires `~/.cn/config.json` (same as `cn info`, `cn search`)
+- No side effects on disk
+
+---
+
 ## Future Commands (Planned)
 
 | Command | Description |

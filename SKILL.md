@@ -55,6 +55,11 @@ cn info <page_id>                    # Show page info, labels, version
 cn info ./docs/my-page.md            # Info from local synced file
 cn info 123456 --xml                 # XML output
 
+cn read <page_id>                    # Read page body as markdown
+cn read ./docs/my-page.md            # Read from local synced file
+cn read 123456 --xml                 # XML output (title + content)
+cn read 123456 --html                # Raw Confluence storage HTML
+
 cn comments <page_id>                # Show footer comments
 cn comments ./docs/my-page.md        # Comments from local file
 cn comments 123456 --xml
@@ -250,6 +255,8 @@ The `.confluence.json` file in each cloned directory tracks space config and syn
 ```bash
 cn search "topic" --xml              # Find pages, get IDs
 cn info <page_id>                    # Check page details, labels, version
+cn read <page_id>                    # Read full page body as markdown
+cn read <page_id> --xml              # Read in XML format for parsing
 ```
 
 ### Create a page with content

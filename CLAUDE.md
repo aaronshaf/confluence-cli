@@ -76,6 +76,7 @@ cn setup     # Configure Confluence credentials
 cn clone     # Clone a space to a new folder
 cn pull      # Pull changes from Confluence
 cn push      # Push local file to Confluence
+cn read      # Read and display page content
 cn status    # Check connection and sync status
 cn tree      # Display page hierarchy
 cn open      # Open page in browser

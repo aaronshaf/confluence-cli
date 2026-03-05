@@ -13,6 +13,7 @@ import {
   showDoctorHelp,
   showHelp,
   showInfoHelp,
+  showReadHelp,
   showLabelsHelp,
   showMoveHelp,
   showOpenHelp,
@@ -37,6 +38,7 @@ import { moveCommand } from './commands/move.js';
 import { openCommand } from './commands/open.js';
 import { folderCommand } from './commands/folder.js';
 import { pullCommand } from './commands/pull.js';
+import { readCommand } from './commands/read.js';
 import { searchCommand } from './commands/search.js';
 import { setup } from './commands/setup.js';
 import { spacesCommand } from './commands/spaces.js';
@@ -273,6 +275,21 @@ async function main(): Promise<void> {
           process.exit(EXIT_CODES.INVALID_ARGUMENTS);
         }
         await infoCommand(target, { xml: args.includes('--xml') });
+        break;
+      }
+
+      case 'read': {
+        if (args.includes('--help')) {
+          showReadHelp();
+          process.exit(EXIT_CODES.SUCCESS);
+        }
+        const target = subArgs.find((arg) => !arg.startsWith('--'));
+        if (!target) {
+          console.error(chalk.red('Page ID or file path is required.'));
+          console.log(chalk.gray('Usage: cn read <id|file>'));
+          process.exit(EXIT_CODES.INVALID_ARGUMENTS);
+        }
+        await readCommand(target, { xml: args.includes('--xml'), html: args.includes('--html') });
         break;
       }
 

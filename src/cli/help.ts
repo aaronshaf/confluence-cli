@@ -214,6 +214,29 @@ ${chalk.yellow('Options:')}
 `);
 }
 
+export function showReadHelp(): void {
+  console.log(`
+${chalk.bold('cn read - Read and display page content')}
+
+${chalk.yellow('Usage:')}
+  cn read <id|file> [options]
+
+${chalk.yellow('Arguments:')}
+  id|file                   Page ID or path to local .md file
+
+${chalk.yellow('Options:')}
+  --xml                     Output in XML format
+  --html                    Output raw Confluence storage format HTML
+  --help                    Show this help message
+
+${chalk.yellow('Examples:')}
+  cn read 123456            Read page by ID
+  cn read ./docs/page.md    Read page from local file
+  cn read 123456 --xml      Read page in XML format
+  cn read 123456 --html     Read raw HTML storage format
+`);
+}
+
 export function showCreateHelp(): void {
   console.log(`
 ${chalk.bold('cn create - Create a new Confluence page')}
@@ -419,6 +442,7 @@ ${chalk.yellow('Commands:')}
   cn search                 Search pages using CQL
   cn spaces                 List available spaces
   cn info                   Show page info and labels
+  cn read                   Read and display page content
   cn create                 Create a new page
   cn update                 Update an existing page
   cn delete                 Delete a page
