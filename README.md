@@ -1,4 +1,4 @@
-# confluence-cli
+# cn - Confluence CLI
 
 ## Installation
 
@@ -16,8 +16,9 @@ bun install -g @aaronshaf/confluence-cli
 # Configure your Confluence credentials
 cn setup
 
-# Search pages
-cn search "authentication"
+# Search pages using CQL
+cn search 'type=page AND text~"authentication"'
+cn search 'type=page AND space=ENG AND lastModified >= "2026-01-01"'
 
 # Open a page in the browser
 cn open "Getting Started"
@@ -38,7 +39,7 @@ cn spaces
 | `cn tree` | Display page hierarchy |
 | `cn open [page]` | Open page in browser |
 | `cn doctor` | Health check for sync issues |
-| `cn search <query>` | Search pages using CQL |
+| `cn search <cql>` | Search pages using CQL |
 | `cn spaces` | List available spaces |
 | `cn info <id\|file>` | Show page info and labels |
 | `cn create <title>` | Create a new page (pipe content via stdin) |
@@ -50,7 +51,7 @@ cn spaces
 | `cn read <id\|file>` | Read and display page content |
 | `cn attachments <id\|file>` | Manage page attachments |
 | `cn folder <subcommand>` | Manage folders (create, list, delete, move) |
-| `cn clone <SPACE_KEY>` | Clone a space to a new folder |
+| `cn clone <SPACE_KEY>` | Clone a space to a local folder |
 | `cn pull` | Pull changes from Confluence as markdown |
 
 Run `cn <command> --help` for details on each command.

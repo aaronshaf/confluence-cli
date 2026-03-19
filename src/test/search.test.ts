@@ -23,7 +23,7 @@ describe('ConfluenceClient - search', () => {
     expect(response.results.length).toBe(0);
   });
 
-  test('narrows results with --space flag via CQL', async () => {
+  test('passes space filter in CQL directly', async () => {
     let capturedCql = '';
     server.use(
       http.get('*/wiki/rest/api/search', ({ request }) => {

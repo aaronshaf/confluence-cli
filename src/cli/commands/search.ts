@@ -5,23 +5,17 @@ import { EXIT_CODES } from '../../lib/errors.js';
 import { escapeXml } from '../../lib/formatters.js';
 
 export interface SearchCommandOptions {
-  space?: string;
   limit?: number;
   xml?: boolean;
 }
 
-export async function searchCommand(query: string, options: SearchCommandOptions = {}): Promise<void> {
+export async function searchCommand(cql: string, options: SearchCommandOptions = {}): Promise<void> {
   const configManager = new ConfigManager();
   const config = await configManager.getConfig();
 
   if (!config) {
     console.error(chalk.red('Not configured. Run: cn setup'));
     process.exit(EXIT_CODES.CONFIG_ERROR);
-  }
-
-  let cql = `type=page AND text~"${query.replace(/"/g, '\\"')}"`;
-  if (options.space) {
-    cql += ` AND space="${options.space.replace(/"/g, '\\"')}"`;
   }
 
   const client = new ConfluenceClient(config);

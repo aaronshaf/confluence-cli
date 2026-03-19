@@ -189,20 +189,21 @@ export function showSearchHelp(): void {
 ${chalk.bold('cn search - Search pages using CQL')}
 
 ${chalk.yellow('Usage:')}
-  cn search <query> [options]
+  cn search <cql> [options]
 
 ${chalk.yellow('Arguments:')}
-  query                     Search query string (required)
+  cql                       Confluence Query Language expression (required)
 
 ${chalk.yellow('Options:')}
-  --space <key>             Narrow search to a specific space
   --limit <n>               Maximum results (default: 10)
   --xml                     Output in XML format
   --help                    Show this help message
 
 ${chalk.yellow('Examples:')}
-  cn search "authentication"
-  cn search "api" --space DOCS
+  cn search 'type=page AND text~"authentication"'
+  cn search 'type=page AND space=ENG AND text~"api"'
+  cn search 'type=page AND lastModified >= "2026-01-01"'
+  cn search 'type=page AND label=draft AND space=DOCS'
 `);
 }
 

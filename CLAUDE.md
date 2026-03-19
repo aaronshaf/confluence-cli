@@ -1,6 +1,6 @@
 # cn - Confluence CLI
 
-CLI tool for syncing Atlassian Confluence spaces and local markdown files.
+General-purpose CLI for Atlassian Confluence — search, read, create, update, delete pages, manage labels and attachments, and optionally clone spaces to local markdown files.
 
 ## Project Documentation
 

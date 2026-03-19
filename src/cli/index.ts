@@ -240,26 +240,21 @@ async function main(): Promise<void> {
           showSearchHelp();
           process.exit(EXIT_CODES.SUCCESS);
         }
-        let spaceKey: string | undefined;
-        const spaceIdx = args.indexOf('--space');
-        if (spaceIdx !== -1 && spaceIdx + 1 < args.length) {
-          spaceKey = args[spaceIdx + 1];
-        }
         let limit: number | undefined;
-        const limitIdx = args.indexOf('--limit');
-        if (limitIdx !== -1 && limitIdx + 1 < args.length) {
-          limit = Number.parseInt(args[limitIdx + 1], 10);
+        const limitArg = args.find((a) => a.startsWith('--limit=') || a === '--limit');
+        if (limitArg) {
+          limit = limitArg.includes('=')
+            ? Number.parseInt(limitArg.split('=')[1], 10)
+            : Number.parseInt(args[args.indexOf('--limit') + 1], 10);
         }
-        const searchFlagValues = new Set(
-          [spaceKey, limit !== undefined ? args[limitIdx + 1] : undefined].filter(Boolean),
-        );
-        const query = subArgs.find((arg) => !arg.startsWith('--') && !searchFlagValues.has(arg));
-        if (!query) {
-          console.error(chalk.red('Search query is required.'));
-          console.log(chalk.gray('Usage: cn search <query>'));
+        const limitValue = limitArg && !limitArg.includes('=') ? args[args.indexOf('--limit') + 1] : undefined;
+        const cql = subArgs.find((arg) => !arg.startsWith('--') && arg !== limitValue);
+        if (!cql) {
+          console.error(chalk.red('CQL query is required.'));
+          console.log(chalk.gray('Usage: cn search <cql>'));
           process.exit(EXIT_CODES.INVALID_ARGUMENTS);
         }
-        await searchCommand(query, { space: spaceKey, limit, xml: args.includes('--xml') });
+        await searchCommand(cql, { limit, xml: args.includes('--xml') });
         break;
       }
 

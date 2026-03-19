@@ -408,23 +408,23 @@ cn doctor [options]
 Search pages using Confluence CQL.
 
 ```
-cn search <query> [options]
+cn search <cql> [options]
 ```
 
 **Arguments:**
-- `query` - Search query string (required)
+- `cql` - Confluence Query Language expression (required)
 
 **Options:**
-- `--space <key>` - Narrow search to a specific space
 - `--limit <n>` - Maximum results (default: 10)
 - `--xml` - Output in XML format
 - `--help` - Show help
 
 **Examples:**
 ```bash
-cn search "authentication"
-cn search "api" --space DOCS
-cn search "onboarding" --limit 5
+cn search 'type=page AND text~"authentication"'
+cn search 'type=page AND space=DOCS AND text~"api"'
+cn search 'type=page AND lastModified >= "2026-01-01"'
+cn search 'type=page AND label=draft AND space=ENG' --limit 5
 ```
 
 ---

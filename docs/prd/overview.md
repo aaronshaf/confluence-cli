@@ -2,15 +2,16 @@
 
 ## Overview
 
-`cn` is a CLI tool for syncing Atlassian Confluence spaces to local folders as markdown files. It provides a local, offline-friendly mirror of Confluence content for reading, searching, and integration with other tools.
+`cn` is a general-purpose CLI for Atlassian Confluence. It supports searching, reading, creating, updating, and deleting pages, managing labels and attachments, and optionally cloning spaces to local markdown files.
 
 ## Goals
 
-1. **Local mirror of Confluence content** - Sync entire spaces to markdown files with proper hierarchy
-2. **Preserve metadata** - Use frontmatter to store page metadata (IDs, labels, authors, etc.)
-3. **Human-readable filenames** - Slugified page titles as filenames
-4. **Offline access** - Browse Confluence content without network access
-5. **Relative path links** - Convert Confluence page links to relative markdown paths for local navigation
+1. **Full Confluence access from the terminal** - Search, read, create, update, delete pages without a browser
+2. **CQL-first search** - Raw Confluence Query Language for powerful, flexible search
+3. **Preserve metadata** - Use frontmatter to store page metadata (IDs, labels, authors, etc.)
+4. **Human-readable filenames** - Slugified page titles as filenames when cloning
+5. **Local mirror** - Clone entire spaces to markdown files with proper hierarchy for offline access
+6. **Relative path links** - Convert Confluence page links to relative markdown paths for local navigation
 
 ## Non-Goals
 
@@ -47,7 +48,7 @@
 | `cn tree` | Display space hierarchy as tree |
 | `cn open [page]` | Open page in browser |
 | `cn doctor` | Health check for sync issues |
-| `cn search <query>` | Search pages using Confluence CQL |
+| `cn search <cql>` | Search pages using Confluence CQL |
 | `cn spaces` | List available spaces |
 | `cn info <id\|file>` | Show page info and labels |
 | `cn create <title>` | Create a new page |

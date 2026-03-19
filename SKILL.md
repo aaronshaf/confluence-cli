@@ -29,13 +29,15 @@ Run `cn setup` to configure interactively.
 ### Search
 
 ```bash
-cn search "<query>"                  # Search all spaces
-cn search "<query>" --space ENG      # Narrow to a space
-cn search "<query>" --limit 20       # More results (default: 10)
-cn search "<query>" --xml            # XML output for parsing
+cn search 'type=page AND text~"query"'                              # Full-text search
+cn search 'type=page AND space=ENG AND text~"query"'               # Narrow to a space
+cn search 'type=page AND lastModified >= "2026-01-01"'             # Date filter
+cn search 'type=page AND label=draft AND space=DOCS'               # Label filter
+cn search 'type=page AND text~"query"' --limit 20                  # More results (default: 10)
+cn search 'type=page AND text~"query"' --xml                       # XML output for parsing
 ```
 
-Search uses Confluence CQL under the hood. The query is a free-text string; the CLI wraps it in a `text ~ "..."` CQL expression scoped to `type = page`.
+The query argument is passed directly to the Confluence CQL search API. Use full CQL syntax for filtering by space, label, type, date, author, and more.
 
 ### Browse & Explore
 
@@ -81,7 +83,7 @@ cn open 123456                       # Open by page ID in web browser
 cn open ./docs/my-page.md            # Open from local path in web browser
 ```
 
-### Clone & Sync
+### Clone & Pull
 
 ```bash
 cn clone ENG                         # Clone space to ./ENG
@@ -99,7 +101,7 @@ cn status                            # Check connection and sync state
 cn status --xml                      # XML output
 ```
 
-Smart pull compares version numbers to detect modifications and handles renames and moves automatically.
+Pull compares version numbers to detect modifications and handles renames and moves automatically.
 
 ### Create & Update Pages
 
@@ -198,7 +200,7 @@ Doctor checks for: duplicate page_ids, orphaned local files, version mismatches.
 Many commands support `--xml` for structured output that's easier to parse:
 
 ```bash
-cn search "api" --xml
+cn search 'type=page AND text~"api"' --xml
 cn status --xml
 cn tree --xml
 cn info 123456 --xml
@@ -253,10 +255,10 @@ The `.confluence.json` file in each cloned directory tracks space config and syn
 ### Find and read a page
 
 ```bash
-cn search "topic" --xml              # Find pages, get IDs
-cn info <page_id>                    # Check page details, labels, version
-cn read <page_id>                    # Read full page body as markdown
-cn read <page_id> --xml              # Read in XML format for parsing
+cn search 'type=page AND text~"topic"' --xml   # Find pages, get IDs
+cn info <page_id>                              # Check page details, labels, version
+cn read <page_id>                              # Read full page body as markdown
+cn read <page_id> --xml                        # Read in XML format for parsing
 ```
 
 ### Create a page with content
@@ -300,7 +302,7 @@ cn create "New Section" --parent 789012 --space ENG
 
 - Use `--xml` output when you need to parse results or pass to another command
 - Page IDs are stable — prefer them over titles when scripting
-- `cn search` supports CQL — queries like `cn search "space = ENG AND label = draft"` work
+- `cn search` takes raw CQL — e.g. `cn search 'type=page AND space=ENG AND label=draft'`
 - For new pages, pipe storage format HTML for full control over formatting
 - Pages with children become `README.md` files in subdirectories when cloned
 - Run `cn doctor` if sync seems out of sync after manual changes
